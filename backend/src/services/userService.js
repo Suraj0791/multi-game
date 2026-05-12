@@ -25,3 +25,37 @@ export async function registerUser(username, email, password) {
   // Step 5: Return what the controller needs to send back
   return { userId: user.id, token };
 }
+
+
+
+export async function loginUser(email, password) {
+  // Step 1: Find user by email
+  const user = await findByEmail(email);
+
+  // Step 2: If no user found, reject
+  // SECURITY: We say "Invalid credentials" not "Email not found"
+  // Why? If we say "Email not found", an attacker learns which emails exist in our system.
+  // Generic message protects our users' privacy.
+  if (!user) {
+    throw new Error('Invalid credentials');
+  }
+
+  // Step 3: Compare the password they typed with the hash in the database
+  // bcrypt.compare("123456", "$2a$10$xJk...") → true or false
+  // It hashes "123456" the same way and checks if the hashes match.
+  // We NEVER store or compare plain passwords — only hashes.
+  const isPasswordCorrect = await bcrypt.compare(password, user.password);
+  if (!isPasswordCorrect) {
+    throw new Error('Invalid credentials');  // same message — don't reveal WHICH part was wrong
+  }
+
+  // Step 4: Password correct! Create JWT token
+  const token = jwt.sign(
+    { userId: user.id },
+    process.env.JWT_SECRET,
+    { expiresIn: '7d' }
+  );
+
+  // Step 5: Return what the controller needs
+  return { userId: user.id, token };
+}

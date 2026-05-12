@@ -18,3 +18,6 @@ export async function findByEmail(email) {
   );
   return result.rows[0];   // returns the user object, or undefined if not found
 }
+
+
+

@@ -1,4 +1,4 @@
-import { registerUser } from '../services/userService.js';
+import { registerUser ,loginUser} from '../services/userService.js';
 
 export async function register(req, res) {
   try {
@@ -14,6 +14,25 @@ export async function register(req, res) {
   } catch (error) {
     res.status(400).json({
       error: error.message    // "Email already exists" or whatever went wrong
+    });
+  }
+}
+
+
+export async function login(req, res) {
+  try {
+    const { email, password } = req.body;
+
+    const result = await loginUser(email, password);
+
+    res.status(200).json({       // 200 not 201 — login doesn't CREATE anything
+      userId: result.userId,
+      token: result.token,
+      message: 'Login successful'
+    });
+  } catch (error) {
+    res.status(401).json({       // 401 = Unauthorized (bad credentials)
+      error: error.message
     });
   }
 }
