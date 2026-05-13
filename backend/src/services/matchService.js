@@ -1,4 +1,6 @@
 import { getMatchById, updateMatchWinner, getMatchByRoundAndNumber, createMatch } from '../models/Match.js';
+import { getUserStats, updateUserStats } from '../models/User.js'; // IMPORT THIS!
+import { calculateNewRatings } from '../utils/eloCalculator.js'; // IMPORT THIS!
 
 export async function completeMatch(matchId, winnerId) {
   // 1. Fetch the match
@@ -11,6 +13,27 @@ export async function completeMatch(matchId, winnerId) {
 
   // 2. Update the match to COMPLETED and set the winner
   const updatedMatch = await updateMatchWinner( matchId, winnerId);
+
+  // --- ELO RATING LOGIC ---
+  // Figure out who the loser is.
+  const loserId = (match.player_1_id === winnerId) ? match.player_2_id : match.player_1_id;
+
+  // Fetch their current ratings from the database
+  const winnerStats = await getUserStats(winnerId);
+  const loserStats = await getUserStats(loserId);
+
+  if (winnerStats && loserStats) {
+      // Run the Chess Math!
+      const eloResult = calculateNewRatings(winnerStats.elo_rating, loserStats.elo_rating);
+
+      // Save the new ratings to the database (and add a win/loss)
+      await updateUserStats(winnerId, eloResult.winnerNew, true);
+      await updateUserStats(loserId, eloResult.loserNew, false);
+      
+      // We can attach the ELO change to the returned match object so the frontend can show "+15"
+      updatedMatch.eloChange = eloResult;
+  }
+  // -------------------------
 
   // 3. Find the neighbor match
   let neighborMatchNumber;
