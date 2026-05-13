@@ -1,9 +1,15 @@
 import { getRandomWord } from '../games/gameConstants.js';
 import { completeMatch } from '../services/matchService.js'; 
 import { TriviaGame } from '../games/TriviaGame.js';
+import { sendMessage } from '../services/chatService.js';
+import { findById } from '../models/User.js';
 
 const activeGames = {};
 const activeTriviaGames = {};
+
+// Chat state — stored in memory, per socket connection
+const chatUsernames = {};   // { socketId: username } — cached so we don't query DB every message
+const lastChatTime = {};    // { socketId: timestamp } — for rate limiting (1 msg/sec)
 
 async function sendNextTriviaQuestion(io, matchId, player1Id, player2Id) {
   const game = activeTriviaGames[matchId];
@@ -116,7 +122,71 @@ export default function setupSocketEvents(io) {
       }
     });
 
+    // ==========================================
+    // CHAT EVENTS
+    // ==========================================
+
+    // User joins a tournament chat room
+    // Different from match rooms! match_5 = 2 players playing a game
+    // chat_tournament_3 = 50+ users chatting about tournament 3
+    socket.on("chat:join", async (data) => {
+      const { tournamentId, userId } = data;
+      const roomName = `chat_tournament_${tournamentId}`;
+
+      // Join the chat room (same socket, different room from match rooms)
+      socket.join(roomName);
+
+      // Look up username ONCE and cache it — don't query DB on every message
+      const user = await findById(userId);
+      chatUsernames[socket.id] = user?.username || 'Anonymous';
+
+      console.log(`💬 ${chatUsernames[socket.id]} joined chat for tournament ${tournamentId}`);
+
+      // Notify everyone in the room
+      io.to(roomName).emit("chat:user_joined", {
+        username: chatUsernames[socket.id],
+        message: `${chatUsernames[socket.id]} joined the chat`
+      });
+    });
+
+    // User sends a chat message
+    socket.on("chat:send", async (data) => {
+      const { tournamentId, userId, text } = data;
+      const roomName = `chat_tournament_${tournamentId}`;
+
+      // RATE LIMIT — max 1 message per second (prevents spam)
+      const now = Date.now();
+      if (lastChatTime[socket.id] && now - lastChatTime[socket.id] < 1000) {
+        socket.emit("chat:error", { message: "Slow down! 1 message per second." });
+        return;
+      }
+      lastChatTime[socket.id] = now;
+
+      try {
+        // Save to DB (service validates: not empty, max 500 chars)
+        const saved = await sendMessage(tournamentId, userId, text);
+
+        // Broadcast to EVERYONE in the chat room (including sender)
+        io.to(roomName).emit("chat:message", {
+          id: saved.id,
+          userId: saved.user_id,
+          username: chatUsernames[socket.id] || 'Anonymous',
+          message: saved.message,
+          createdAt: saved.created_at
+        });
+      } catch (error) {
+        // Only the sender sees the error (empty message, too long, etc.)
+        socket.emit("chat:error", { message: error.message });
+      }
+    });
+
+    // ==========================================
+    // DISCONNECT
+    // ==========================================
     socket.on("disconnect", () => {
+      // Clean up chat state for this socket
+      delete chatUsernames[socket.id];
+      delete lastChatTime[socket.id];
       console.log(`❌ User disconnected: ${socket.id}`);
     });
   });

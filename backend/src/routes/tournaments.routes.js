@@ -24,4 +24,9 @@ import { createOrder } from '../controllers/paymentController.js';
 
 router.post('/:id/pay', authenticate, createOrder);
 
+// Chat — load message history (live messages go through WebSocket)
+import { getHistory } from '../controllers/chatController.js';
+
+router.get('/:id/chat', getHistory);
+
 export default router;
