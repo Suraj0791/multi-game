@@ -47,3 +47,22 @@ export async function getAll(req, res) {
   }
 }
 
+
+
+import { startTournament as startService } from '../services/tournamentService.js';
+
+// Handle PUT /tournaments/:id/start
+export async function startTournament(req, res) {
+  try {
+    const tournamentId = req.params.id;
+    const hostId = req.user.userId; // from JWT
+
+    const result = await startService(tournamentId, hostId);
+
+    res.status(200).json(result);
+  } catch (error) {
+    // 403 Forbidden if they aren't the host, 400 Bad Request for rule violations
+    const status = error.message.includes('Not eligible') ? 403 : 400;
+    res.status(status).json({ error: error.message });
+  }
+}

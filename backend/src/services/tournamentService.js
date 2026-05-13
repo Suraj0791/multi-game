@@ -1,5 +1,11 @@
-
-import { createTournament as insertTournament, getTournaments as fetchTournaments, getTournamentById as fetchTournamentById } from '../models/Tournament.js';
+import { 
+  createTournament as insertTournament, 
+  getTournaments as fetchTournaments, 
+  getTournamentById as fetchTournamentById,
+  updateTournamentStatus
+} from '../models/Tournament.js';
+import { getPlayersByTournament } from '../models/TournamentPlayer.js';
+import { createMatch } from '../models/Match.js'; // IMPORT THIS!
 
 export async function createTournament(name, game_type, max_players, entry_fee, host_id) {
   // Validate required fields (entry_fee can be 0, so we don't check it)
@@ -60,5 +66,66 @@ export async function getTournamentById(id) {
     status: t.status,
     createdAt: t.created_at,
     startsAt: t.starts_at,
+  };
+}
+
+
+
+export async function startTournament(id, host_id) {
+  const tournament = await getTournamentById(id);
+  
+  if (!tournament) {
+    throw new Error('Tournament does not exist');
+  }
+
+  // tournament.hostId comes from our camelCase conversion in getTournamentById
+  if (host_id !== tournament.hostId) {
+    throw new Error('Not eligible to start (only the host can start it)');
+  }
+
+  // Bouncer Pattern: Throw error if it's NOT in REGISTRATION
+  if (tournament.status !== 'REGISTRATION') {
+    throw new Error('Tournament is not in registration phase');
+  }
+
+  // Get all players (we will need them for the bracket later)
+  const players = await getPlayersByTournament(id);
+  
+  // Need at least 2 players to start a tournament
+  if (players.length < 2) {
+    throw new Error('Need at least 2 players to start the tournament');
+  }
+
+  // --- BRACKET MATH ---
+  // 1. Shuffle the players so it's a random draw
+  const shuffledPlayers = players.sort(() => Math.random() - 0.5);
+
+  let matchNumber = 1;
+  let matchesCreated = 0;
+
+  // 2. Loop through the players array, jumping TWO spots at a time (i += 2)
+  for (let i = 0; i < shuffledPlayers.length; i += 2) {
+    const player1 = shuffledPlayers[i];
+    const player2 = shuffledPlayers[i + 1];
+
+    // 3. Create the match if we have 2 players
+    // (If there's an odd number of players, the last player won't have an opponent right now)
+    if (player1 && player2) {
+      // player_id comes from the tournament_players table (which getPlayersByTournament returns)
+      await createMatch(id, player1.player_id, player2.player_id, 1, matchNumber);
+      matchNumber++;
+      matchesCreated++;
+    }
+  }
+
+  // Update status to IN_PROGRESS
+  const updatedTournament = await updateTournamentStatus(id, 'IN_PROGRESS');
+
+  return {
+    message: "Tournament started successfully",
+    tournamentId: updatedTournament.id,
+    status: updatedTournament.status,
+    bracketGenerated: true,
+    matchesCreated: matchesCreated
   };
 }

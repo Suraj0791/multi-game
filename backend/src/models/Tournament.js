@@ -35,5 +35,19 @@ export async function getTournamentById(id) {
      WHERE t.id = $1`,
     [id]
   );
-  return result.rows[0];  // one tournament or undefined
+  return result.rows[0];
 }
+
+
+
+export async function updateTournamentStatus(id, newStatus) {
+  const result = await query(
+    `UPDATE tournaments 
+     SET status = $2 
+     WHERE id = $1 
+     RETURNING *`,
+    [id, newStatus]
+  );
+  return result.rows[0];
+}
+
