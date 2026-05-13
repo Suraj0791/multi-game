@@ -26,3 +26,35 @@ export async function getMatchesByTournament(tournamentId) {
   );
   return result.rows;
 }
+
+// Get ONE match by its ID
+export async function getMatchById(matchId) {
+  const result = await query(
+    `SELECT * FROM matches WHERE id = $1`,
+    [matchId]
+  );
+  return result.rows[0];
+}
+
+// Update a match to be completed and set the winner
+export async function updateMatchWinner(matchId, winnerId) {
+  const result = await query(
+    `UPDATE matches 
+     SET status = 'COMPLETED', winner_id = $2
+     WHERE id = $1
+     RETURNING *`,
+    [matchId, winnerId]
+  );
+  return result.rows[0];
+}
+
+// Find a specific match by its tournament, round, and match number
+// (Used to find the neighbor match!)
+export async function getMatchByRoundAndNumber(tournamentId, roundNumber, matchNumber) {
+  const result = await query(
+    `SELECT * FROM matches 
+     WHERE tournament_id = $1 AND round_number = $2 AND match_number = $3`,
+    [tournamentId, roundNumber, matchNumber]
+  );
+  return result.rows[0];
+}
