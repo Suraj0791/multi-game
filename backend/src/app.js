@@ -1,7 +1,7 @@
 import express from "express";
 import cors from "cors";
 import authRoutes from './routes/auth.routes.js';
-
+import tournamnentRoutes from './routes/tournaments.routes.js'
 
 
 const app = express();
@@ -16,6 +16,7 @@ app.get("/", (req, res) => {
 });
 
 app.use('/auth', authRoutes);
+app.use('/tournaments',tournamnentRoutes);
 
 
 export default app;
