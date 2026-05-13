@@ -1,6 +1,7 @@
 import { getMatchById, updateMatchWinner, getMatchByRoundAndNumber, createMatch } from '../models/Match.js';
 import { getUserStats, updateUserStats } from '../models/User.js';
 import { calculateNewRatings } from '../utils/eloCalculator.js';
+import { logRatingChange } from '../models/Rating.js'; // NEW!
 
 export async function completeMatch(matchId, winnerId) {
   const match = await getMatchById(matchId);
@@ -18,8 +19,15 @@ export async function completeMatch(matchId, winnerId) {
 
   if (winnerStats && loserStats) {
       const eloResult = calculateNewRatings(winnerStats.elo_rating, loserStats.elo_rating);
+      
+      // Update Users Table
       await updateUserStats(winnerId, eloResult.winnerNew, true);
       await updateUserStats(loserId, eloResult.loserNew, false);
+      
+      // NEW: Log it to the History Table for the graphs!
+      await logRatingChange(winnerId, matchId, eloResult.winnerDiff, eloResult.winnerNew);
+      await logRatingChange(loserId, matchId, eloResult.loserDiff, eloResult.loserNew);
+
       updatedMatch.eloChange = eloResult;
   }
 

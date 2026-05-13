@@ -59,3 +59,16 @@ export async function loginUser(email, password) {
   // Step 5: Return what the controller needs
   return { userId: user.id, token };
 }
+
+import { getUserStats } from '../models/User.js';
+import { getRankBadge, getAchievementBadges } from '../rating/badges.js';
+
+export async function getUserBadges(userId) {
+  const stats = await getUserStats(userId);
+  if (!stats) throw new Error("User not found");
+
+  const rank = getRankBadge(stats.elo_rating);
+  const achievements = getAchievementBadges(stats.total_wins);
+
+  return { rank, achievements };
+}
