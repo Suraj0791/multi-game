@@ -2,8 +2,8 @@ import express from "express";
 import cors from "cors";
 import authRoutes from './routes/auth.routes.js';
 import tournamnentRoutes from './routes/tournaments.routes.js';
-import matchRoutes from './routes/matches.routes.js'; // IMPORT THIS!
-
+import matchRoutes from './routes/matches.routes.js'; 
+import leaderboardRoutes from './routes/leaderboard.routes.js'; // NEW
 
 const app = express();
 
@@ -18,7 +18,7 @@ app.get("/", (req, res) => {
 
 app.use('/auth', authRoutes);
 app.use('/tournaments', tournamnentRoutes);
-app.use('/matches', matchRoutes); // MOUNT IT!
-
+app.use('/matches', matchRoutes); 
+app.use('/leaderboard', leaderboardRoutes); // NEW
 
 export default app;
