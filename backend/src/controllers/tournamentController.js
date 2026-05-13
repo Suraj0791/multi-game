@@ -1,4 +1,4 @@
-import { createTournament,getTournaments } from '../services/tournamentService.js';
+import { createTournament, getTournaments, getTournamentById } from '../services/tournamentService.js';
 
 // Handle POST /tournaments — create a new tournament
 export async function create(req, res) {
@@ -23,7 +23,18 @@ export async function create(req, res) {
   }
 }
 
-
+// Handle GET /tournaments/:id — view one tournament
+export async function getOne(req, res) {
+  try {
+    // :id from URL goes into req.params (not req.body — it's a GET request)
+    const tournament = await getTournamentById(req.params.id);
+    res.status(200).json(tournament);
+  } catch (error) {
+    // "Tournament not found" → 404, other errors → 500
+    const status = error.message === 'Tournament not found' ? 404 : 500;
+    res.status(status).json({ error: error.message });
+  }
+}
 // Handle GET /tournaments — list all tournaments
 export async function getAll(req, res) {
   try {

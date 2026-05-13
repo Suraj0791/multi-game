@@ -24,3 +24,16 @@ export async function getTournaments() {
   );
   return result.rows;
 }
+
+// Find one tournament by ID (with host name)
+// Same JOIN as above, but WHERE filters to one specific tournament
+export async function getTournamentById(id) {
+  const result = await query(
+    `SELECT t.*, u.username AS host_name
+     FROM tournaments t
+     JOIN users u ON t.host_id = u.id
+     WHERE t.id = $1`,
+    [id]
+  );
+  return result.rows[0];  // one tournament or undefined
+}

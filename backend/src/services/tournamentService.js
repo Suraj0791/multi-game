@@ -1,5 +1,5 @@
 
-import { createTournament as insertTournament ,getTournaments as fetchTournaments } from '../models/Tournament.js';
+import { createTournament as insertTournament, getTournaments as fetchTournaments, getTournamentById as fetchTournamentById } from '../models/Tournament.js';
 
 export async function createTournament(name, game_type, max_players, entry_fee, host_id) {
   // Validate required fields (entry_fee can be 0, so we don't check it)
@@ -38,4 +38,27 @@ export async function getTournaments() {
     status: t.status,
     createdAt: t.created_at,
   }));
+}
+
+// Fetch one tournament by ID
+export async function getTournamentById(id) {
+  const t = await fetchTournamentById(id);
+
+  // If no tournament found, throw error (controller will send 404)
+  if (!t) {
+    throw new Error('Tournament not found');
+  }
+
+  return {
+    id: t.id,
+    name: t.name,
+    gameType: t.game_type,
+    hostId: t.host_id,
+    hostName: t.host_name,
+    maxPlayers: t.max_players,
+    entryFee: t.entry_fee,
+    status: t.status,
+    createdAt: t.created_at,
+    startsAt: t.starts_at,
+  };
 }
