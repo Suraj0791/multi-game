@@ -1,4 +1,5 @@
 import { getRandomWord } from '../games/gameConstants.js';
+import { completeMatch } from '../services/matchService.js'; // IMPORT THIS!
 
 // The "Whiteboard" - Stores game state in temporary RAM
 const activeGames = {};
@@ -39,8 +40,8 @@ export default function setupSocketEvents(io) {
       socket.to(roomName).emit("receive_stroke", data);
     });
 
-    // EVENT 3: GUESSING
-    socket.on("submit_guess", (data) => {
+    // EVENT 3: GUESSING (Made this async!)
+    socket.on("submit_guess", async (data) => {
       const { matchId, guess, playerId } = data;
       const game = activeGames[matchId];
 
@@ -52,15 +53,27 @@ export default function setupSocketEvents(io) {
         // Correct guess!
         console.log(`Match ${matchId}: Correct guess!`);
         
-        // Shout to everyone in the room that someone won the round
-        io.to(`match_${matchId}`).emit("round_won", { 
-          winnerId: playerId, 
-          word: game.wordToDraw 
-        });
+        try {
+          // 1. Tell the Database that the match is over!
+          const result = await completeMatch(matchId, playerId);
+
+          // 2. Shout to everyone in the room that the game is over!
+          io.to(`match_${matchId}`).emit("match_over", { 
+            winnerId: playerId, 
+            word: game.wordToDraw,
+            bracketUpdate: result.message // Tells them if Round 2 was created!
+          });
+
+          // 3. Clean up the whiteboard (erase the game since it's over)
+          delete activeGames[matchId];
+          
+        } catch (error) {
+          console.error("Error completing match:", error);
+          socket.emit("error", { message: "Failed to save match result." });
+        }
 
       } else {
         // Wrong guess. 
-        // We can whisper back to just the person who guessed.
         socket.emit("wrong_guess", { message: "Try again!" });
       }
     });
