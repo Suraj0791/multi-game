@@ -7,6 +7,7 @@ import leaderboardRoutes from './routes/leaderboard.routes.js';
 import userRoutes from './routes/users.routes.js';
 import webhookRoutes from './routes/webhooks.routes.js';
 import notificationRoutes from './routes/notifications.routes.js';
+import { errorHandler } from './middleware/error.middleware.js';
 
 const app = express();
 
@@ -14,17 +15,14 @@ const app = express();
 app.use(cors());
 
 // Webhook routes MUST come BEFORE express.json()
-// WHY? Webhooks need the raw body (untouched bytes) for signature verification.
-// express.json() parses the body into a JS object — raw bytes are lost.
-// The webhook route uses express.raw() internally to keep the raw bytes.
 app.use('/webhooks', webhookRoutes);
 
-// JSON parsing for ALL other routes (everything below this line gets parsed bodies)
+// JSON parsing for ALL other routes
 app.use(express.json());
 
 // Routes
 app.get("/", (req, res) => {
-  res.json({ message: "TourneyHub API is running" });
+  res.json({ success: true, data: { message: "TourneyHub API is running" } });
 });
 
 app.use('/auth', authRoutes);
@@ -33,5 +31,14 @@ app.use('/tournaments', tournamnentRoutes);
 app.use('/matches', matchRoutes); 
 app.use('/leaderboard', leaderboardRoutes);
 app.use('/notifications', notificationRoutes);
+
+// 404 handler — if no route matched above
+app.use((req, res) => {
+  res.status(404).json({ success: false, error: `Route ${req.method} ${req.path} not found` });
+});
+
+// Centralized error handler — MUST be LAST
+// Catches all errors thrown in any route/controller/service above
+app.use(errorHandler);
 
 export default app;
