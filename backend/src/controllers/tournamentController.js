@@ -49,7 +49,7 @@ export async function getAll(req, res) {
 
 
 
-import { startTournament as startService } from '../services/tournamentService.js';
+import { startTournament as startService, getTournamentMatches, getTournamentBracket } from '../services/tournamentService.js';
 
 // Handle PUT /tournaments/:id/start
 export async function startTournament(req, res) {
@@ -63,6 +63,28 @@ export async function startTournament(req, res) {
   } catch (error) {
     // 403 Forbidden if they aren't the host, 400 Bad Request for rule violations
     const status = error.message.includes('Not eligible') ? 403 : 400;
+    res.status(status).json({ error: error.message });
+  }
+}
+
+// Handle GET /tournaments/:id/matches
+export async function getMatches(req, res) {
+  try {
+    const matches = await getTournamentMatches(req.params.id);
+    res.status(200).json(matches);
+  } catch (error) {
+    const status = error.message.includes('not found') ? 404 : 500;
+    res.status(status).json({ error: error.message });
+  }
+}
+
+// Handle GET /tournaments/:id/bracket
+export async function getBracket(req, res) {
+  try {
+    const bracket = await getTournamentBracket(req.params.id);
+    res.status(200).json(bracket);
+  } catch (error) {
+    const status = error.message.includes('not found') ? 404 : 500;
     res.status(status).json({ error: error.message });
   }
 }

@@ -129,3 +129,47 @@ export async function startTournament(id, host_id) {
     matchesCreated: matchesCreated
   };
 }
+
+// Fetch all matches as a flat array
+export async function getTournamentMatches(id) {
+  const tournament = await getTournamentById(id);
+  if (!tournament) {
+    throw new Error('Tournament not found');
+  }
+
+  const matches = await getMatchesByTournament(id);
+
+  // Convert snake_case from DB to camelCase for API
+  return matches.map(m => ({
+    id: m.id,
+    roundNumber: m.round_number,
+    matchNumber: m.match_number,
+    player1Id: m.player_1_id,
+    player1Name: m.player_1_name, // from JOIN
+    player2Id: m.player_2_id,
+    player2Name: m.player_2_name, // from JOIN
+    status: m.status,
+    winnerId: m.winner_id
+  }));
+}
+
+// Group matches by round for the bracket UI
+export async function getTournamentBracket(id) {
+  const matches = await getTournamentMatches(id);
+  
+  // Create an object where keys are "round1", "round2", etc.
+  const bracket = {};
+  
+  matches.forEach(m => {
+    const roundKey = `round${m.roundNumber}`;
+    if (!bracket[roundKey]) {
+      bracket[roundKey] = []; // Initialize empty array if it doesn't exist yet
+    }
+    bracket[roundKey].push(m);
+  });
+
+  return {
+    tournamentId: parseInt(id),
+    rounds: bracket
+  };
+}

@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { create, getAll, getOne, startTournament } from '../controllers/tournamentController.js';
+import { create, getAll, getOne, startTournament, getMatches, getBracket } from '../controllers/tournamentController.js';
 import { join, players, leave } from '../controllers/playerController.js';
 import { authenticate } from '../middleware/auth.middleware.js';
 
@@ -10,6 +10,8 @@ router.post('/', authenticate, create);       // Create tournament (auth require
 router.get('/', getAll);                       // List all tournaments (public)
 router.get('/:id', getOne);                    // View one tournament (public)
 router.put('/:id/start', authenticate, startTournament); // Start tournament (auth required)
+router.get('/:id/matches', getMatches);        // List flat matches (public)
+router.get('/:id/bracket', getBracket);        // List grouped bracket (public)
 
 // Player actions (all need :id for tournament)
 router.post('/:id/join', authenticate, join);       // Join tournament (auth required)
