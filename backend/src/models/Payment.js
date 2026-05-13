@@ -32,19 +32,19 @@ export async function findByRazorpayOrderId(razorpayOrderId) {
 export async function findSucceededPayment(userId, tournamentId) {
   const result = await query(
     `SELECT * FROM payments 
-     WHERE user_id = $1 AND tournament_id = $2 AND status = 'SUCCEEDED'`,
+     WHERE user_id = $1 AND tournament_id = $2 AND status = 'SUCCESS'`,
     [userId, tournamentId]
   );
   return result.rows[0];
 }
 
-// Function 4: Mark a payment as SUCCEEDED after webhook confirms it
+// Function 4: Mark a payment as SUCCESS after webhook confirms it
 // Accepts: razorpayOrderId, razorpayPaymentId (Razorpay's actual payment ID)
 // Returns: updated payment row
 export async function markPaymentSucceeded(razorpayOrderId, razorpayPaymentId) {
   const result = await query(
     `UPDATE payments
-     SET status = 'SUCCEEDED', razorpay_payment_id = $2
+     SET status = 'SUCCESS', razorpay_payment_id = $2
      WHERE razorpay_order_id = $1
      RETURNING *`,
     [razorpayOrderId, razorpayPaymentId]

@@ -16,6 +16,15 @@ export async function findByEmail(email) {
   return result.rows[0];
 }
 
+// Look up a user by ID — used by chat to get username
+export async function findById(id) {
+  const result = await query(
+    'SELECT id, username FROM users WHERE id = $1',
+    [id]
+  );
+  return result.rows[0];
+}
+
 export async function getUserStats(userId) {
   const result = await query(
     `SELECT elo_rating, total_wins, total_losses 

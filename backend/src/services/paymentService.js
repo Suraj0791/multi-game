@@ -88,7 +88,7 @@ export async function handleWebhook(rawBody, signature) {
   //    We check: is this order in our DB? Is it already SUCCEEDED?
   const payment = await findByRazorpayOrderId(razorpayOrderId);
   if (!payment) return { received: true };                    // unknown order, ignore
-  if (payment.status === 'SUCCEEDED') return { received: true };  // already done, skip
+  if (payment.status === 'SUCCESS') return { received: true };  // already done, skip
 
   // 6. PERSIST — everything checks out, update the database
   //    Mark payment as SUCCEEDED
