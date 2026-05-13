@@ -11,3 +11,16 @@ export async function createTournament(name, game_type, max_players, entry_fee, 
   );
   return result.rows[0];
 }
+
+
+// List all tournaments with host username
+// JOIN connects tournaments with users table to get the host's name
+export async function getTournaments() {
+  const result = await query(
+    `SELECT t.*, u.username AS host_name
+     FROM tournaments t
+     JOIN users u ON t.host_id = u.id
+     ORDER BY t.created_at DESC`
+  );
+  return result.rows;
+}
