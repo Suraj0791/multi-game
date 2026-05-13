@@ -1,7 +1,8 @@
 import { getMatchById, updateMatchWinner, getMatchByRoundAndNumber, createMatch } from '../models/Match.js';
 import { getUserStats, updateUserStats } from '../models/User.js';
 import { calculateNewRatings } from '../utils/eloCalculator.js';
-import { logRatingChange } from '../models/Rating.js'; // NEW!
+import { logRatingChange } from '../models/Rating.js';
+import { notify } from '../services/notificationService.js';
 
 export async function completeMatch(matchId, winnerId) {
   const match = await getMatchById(matchId);
@@ -24,9 +25,15 @@ export async function completeMatch(matchId, winnerId) {
       await updateUserStats(winnerId, eloResult.winnerNew, true);
       await updateUserStats(loserId, eloResult.loserNew, false);
       
-      // NEW: Log it to the History Table for the graphs!
+      // Log it to the History Table for the graphs!
       await logRatingChange(winnerId, matchId, eloResult.winnerDiff, eloResult.winnerNew);
       await logRatingChange(loserId, matchId, eloResult.loserDiff, eloResult.loserNew);
+
+      // Notify both players about the result
+      await notify(winnerId, 'MATCH_WON', '🏆 Victory!',
+        `You won! Rating: ${winnerStats.elo_rating} → ${eloResult.winnerNew} (+${eloResult.winnerDiff})`, matchId);
+      await notify(loserId, 'MATCH_LOST', 'Match Over',
+        `Rating: ${loserStats.elo_rating} → ${eloResult.loserNew} (${eloResult.loserDiff})`, matchId);
 
       updatedMatch.eloChange = eloResult;
   }

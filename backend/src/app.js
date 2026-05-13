@@ -6,6 +6,7 @@ import matchRoutes from './routes/matches.routes.js';
 import leaderboardRoutes from './routes/leaderboard.routes.js'; 
 import userRoutes from './routes/users.routes.js';
 import webhookRoutes from './routes/webhooks.routes.js';
+import notificationRoutes from './routes/notifications.routes.js';
 
 const app = express();
 
@@ -27,9 +28,10 @@ app.get("/", (req, res) => {
 });
 
 app.use('/auth', authRoutes);
-app.use('/users', userRoutes); // NEW
+app.use('/users', userRoutes);
 app.use('/tournaments', tournamnentRoutes);
 app.use('/matches', matchRoutes); 
-app.use('/leaderboard', leaderboardRoutes); 
+app.use('/leaderboard', leaderboardRoutes);
+app.use('/notifications', notificationRoutes);
 
 export default app;

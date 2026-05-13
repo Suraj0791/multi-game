@@ -3,6 +3,7 @@ import { completeMatch } from '../services/matchService.js';
 import { TriviaGame } from '../games/TriviaGame.js';
 import { sendMessage } from '../services/chatService.js';
 import { findById } from '../models/User.js';
+import { setSocketIO } from '../services/notificationService.js';
 
 const activeGames = {};
 const activeTriviaGames = {};
@@ -48,6 +49,9 @@ async function sendNextTriviaQuestion(io, matchId, player1Id, player2Id) {
 }
 
 export default function setupSocketEvents(io) {
+  // Give the notification service access to io so it can push live notifications
+  setSocketIO(io);
+
   io.on("connection", (socket) => {
     console.log(`📞 User connected: ${socket.id}`);
 
@@ -178,6 +182,19 @@ export default function setupSocketEvents(io) {
         // Only the sender sees the error (empty message, too long, etc.)
         socket.emit("chat:error", { message: error.message });
       }
+    });
+
+    // ==========================================
+    // NOTIFICATION EVENTS
+    // ==========================================
+
+    // User subscribes to their personal notification channel
+    // Each user gets their own room: "user_7" — only they are in it
+    // When notify() is called anywhere in the app, it pushes to this room
+    socket.on("notifications:subscribe", (data) => {
+      const { userId } = data;
+      socket.join(`user_${userId}`);
+      console.log(`🔔 User ${userId} subscribed to notifications`);
     });
 
     // ==========================================
