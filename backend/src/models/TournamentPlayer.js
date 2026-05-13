@@ -58,3 +58,15 @@ export async function countPlayers(tournamentId) {
   );
   return parseInt(result.rows[0].count);  // COUNT returns string, parseInt converts to number
 }
+
+// Update payment status when entry fee is paid
+export async function updatePlayerPaymentStatus(tournamentId, playerId, status) {
+  const result = await query(
+    `UPDATE tournament_players
+     SET payment_status = $3
+     WHERE tournament_id = $1 AND player_id = $2
+     RETURNING *`,
+    [tournamentId, playerId, status]
+  );
+  return result.rows[0];
+}
