@@ -18,4 +18,10 @@ router.post('/:id/join', authenticate, join);       // Join tournament (auth req
 router.get('/:id/players', players);                // List players (public)
 router.delete('/:id/leave', authenticate, leave);   // Leave tournament (auth required)
 
+// Payment — user clicks "Pay" to get a Razorpay order
+// Verification happens via webhook (POST /webhooks/razorpay), not here
+import { createOrder } from '../controllers/paymentController.js';
+
+router.post('/:id/pay', authenticate, createOrder);
+
 export default router;
