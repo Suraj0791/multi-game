@@ -4,11 +4,18 @@ import { createPaymentOrder, findByRazorpayOrderId, findSucceededPayment, markPa
 import { getTournamentById } from '../models/Tournament.js';
 import { updatePlayerPaymentStatus } from '../models/TournamentPlayer.js';
 
-// Initialize Razorpay — keys come from .env, NEVER hardcode
-const razorpay = new Razorpay({
-  key_id: process.env.RAZORPAY_KEY_ID,
-  key_secret: process.env.RAZORPAY_KEY_SECRET
-});
+// Lazy initialization — only creates Razorpay instance when actually needed
+// This prevents the app from crashing if keys aren't set (e.g., during tests)
+let razorpay = null;
+function getRazorpay() {
+  if (!razorpay) {
+    razorpay = new Razorpay({
+      key_id: process.env.RAZORPAY_KEY_ID,
+      key_secret: process.env.RAZORPAY_KEY_SECRET
+    });
+  }
+  return razorpay;
+}
 
 // ============================================================
 // FUNCTION 1: createOrder
@@ -30,7 +37,7 @@ export async function createOrder(userId, tournamentId) {
 
   // LOGIC — ask Razorpay to create an order
   // amount is in PAISE (₹200 = 20000 paise), Razorpay requires paise
-  const order = await razorpay.orders.create({
+  const order = await getRazorpay().orders.create({
     amount: tournament.entry_fee * 100,
     currency: 'INR',
     receipt: `tourney_${tournamentId}_user_${userId}`,
