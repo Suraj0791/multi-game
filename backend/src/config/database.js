@@ -20,5 +20,14 @@ export async function query(text, params) {
     );
   }
 
-  return pool.query(text, params);
+  const start = Date.now();
+  const result = await pool.query(text, params);
+  const duration = Date.now() - start;
+
+  // Log slow queries (>100ms) for optimization
+  if (duration > 100) {
+    console.warn(`⚠️ SLOW QUERY [${duration}ms]: ${text.substring(0, 80)}...`);
+  }
+
+  return result;
 }

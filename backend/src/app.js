@@ -1,5 +1,10 @@
 import express from "express";
 import cors from "cors";
+import helmet from "helmet";
+import morgan from "morgan";
+import rateLimit from "express-rate-limit";
+
+// Route imports
 import authRoutes from './routes/auth.routes.js';
 import tournamnentRoutes from './routes/tournaments.routes.js';
 import matchRoutes from './routes/matches.routes.js'; 
@@ -11,8 +16,50 @@ import { errorHandler } from './middleware/error.middleware.js';
 
 const app = express();
 
-// Middleware
-app.use(cors());
+// ============================================================
+// SECURITY MIDDLEWARE
+// ============================================================
+
+// Helmet — sets security HTTP headers (prevents XSS, clickjacking, etc.)
+// One line, instant security. No config needed.
+app.use(helmet());
+
+// CORS — controls which domains can call your API
+// In development: allow all. In production: lock to your frontend domain.
+app.use(cors({
+  origin: process.env.CORS_ORIGIN || '*',
+  // In production .env: CORS_ORIGIN=https://tourneyhub.com
+}));
+
+// Rate Limiting — prevents spam and brute force attacks
+// 100 requests per 15 minutes per IP address
+const generalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,  // 15 minutes
+  max: 100,                   // max 100 requests per window
+  message: { success: false, error: 'Too many requests. Try again in 15 minutes.' },
+  standardHeaders: true,      // sends rate limit info in response headers
+});
+
+// Stricter limit for auth routes — prevents brute force password guessing
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,  // 15 minutes
+  max: 20,                    // only 20 login/register attempts per 15 min
+  message: { success: false, error: 'Too many auth attempts. Try again later.' },
+});
+
+app.use(generalLimiter);  // apply to ALL routes
+
+// ============================================================
+// LOGGING
+// ============================================================
+
+// Morgan — logs every HTTP request automatically
+// "dev" format: GET /tournaments 200 23ms
+app.use(morgan('dev'));
+
+// ============================================================
+// BODY PARSING
+// ============================================================
 
 // Webhook routes MUST come BEFORE express.json()
 app.use('/webhooks', webhookRoutes);
@@ -20,12 +67,32 @@ app.use('/webhooks', webhookRoutes);
 // JSON parsing for ALL other routes
 app.use(express.json());
 
-// Routes
+// ============================================================
+// HEALTH CHECK — monitoring tools ping this to check if server is alive
+// ============================================================
+app.get('/health', (req, res) => {
+  const memUsage = process.memoryUsage();
+  res.json({
+    success: true,
+    data: {
+      status: 'healthy',
+      uptime: Math.floor(process.uptime()) + 's',
+      memory: Math.round(memUsage.heapUsed / 1024 / 1024) + 'MB',
+      timestamp: new Date().toISOString()
+    }
+  });
+});
+
+// ============================================================
+// ROUTES
+// ============================================================
 app.get("/", (req, res) => {
   res.json({ success: true, data: { message: "TourneyHub API is running" } });
 });
 
-app.use('/auth', authRoutes);
+// Auth routes get the STRICTER rate limiter
+app.use('/auth', authLimiter, authRoutes);
+
 app.use('/users', userRoutes);
 app.use('/tournaments', tournamnentRoutes);
 app.use('/matches', matchRoutes); 
@@ -38,7 +105,6 @@ app.use((req, res) => {
 });
 
 // Centralized error handler — MUST be LAST
-// Catches all errors thrown in any route/controller/service above
 app.use(errorHandler);
 
 export default app;
