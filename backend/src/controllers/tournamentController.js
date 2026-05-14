@@ -1,4 +1,5 @@
 import { createTournament, getTournaments, getTournamentById } from '../services/tournamentService.js';
+import cache from '../utils/cache.js';
 
 // Handle POST /tournaments — create a new tournament
 export async function create(req, res) {
@@ -12,6 +13,11 @@ export async function create(req, res) {
 
     // Service handles validation + DB insert + formatting
     const result = await createTournament(name, game_type, max_players, entry_fee, host_id);
+
+    // Cache Invalidation!
+    // A new tournament was just created, so the old list of tournaments in memory is wrong.
+    // We MUST delete it so the next person asks the database and gets the fresh list.
+    cache.del('all_tournaments');
 
     // result is already formatted by service — just spread it into the response
     res.status(201).json({
@@ -38,9 +44,20 @@ export async function getOne(req, res) {
 // Handle GET /tournaments — list all tournaments
 export async function getAll(req, res) {
   try {
+    // 1. Check Cache First (The fast path: 1ms)
+    const cachedTournaments = cache.get('all_tournaments');
+    if (cachedTournaments) {
+      console.log('⚡ CACHE HIT: Returning tournaments from memory');
+      return res.status(200).json(cachedTournaments);
+    }
+
+    // 2. Cache Miss (The slow path: 450ms)
+    console.log('🐢 CACHE MISS: Fetching tournaments from Neon Database');
     const tournaments = await getTournaments();
-    // List endpoint → just send the array directly
-    //tournamnets is an array not object this time that why
+    
+    // 3. Save to Cache for the next 30 seconds
+    cache.set('all_tournaments', tournaments);
+
     res.status(200).json(tournaments);
   } catch (error) {
     res.status(500).json({ error: error.message });  // 500 because this isn't user's fault
