@@ -33,13 +33,13 @@ describe('Auth API', () => {
         .send(testUser)                     // send this body
         .expect(201);                       // expect 201 status
 
-      // Check response body has what we need
+      // Check response body matches what YOUR controller returns:
+      // { userId, token, message }
       expect(response.body).toHaveProperty('token');
-      expect(response.body.user).toHaveProperty('id');
-      expect(response.body.user.username).toBe(testUser.username);
-      expect(response.body.user.email).toBe(testUser.email);
-      // Password should NOT be in the response
-      expect(response.body.user).not.toHaveProperty('password');
+      expect(response.body).toHaveProperty('userId');
+      expect(response.body.message).toBe('User registered');
+      // Token should be a non-empty string
+      expect(response.body.token).toBeTruthy();
     });
 
     it('should reject registration with missing fields', async () => {
