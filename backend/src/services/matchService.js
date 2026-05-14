@@ -15,25 +15,39 @@ export async function completeMatch(matchId, winnerId) {
   const updatedMatch = await updateMatchWinner(matchId, winnerId);
 
   const loserId = (match.player_1_id === winnerId) ? match.player_2_id : match.player_1_id;
-  const winnerStats = await getUserStats(winnerId);
-  const loserStats = await getUserStats(loserId);
+  
+  // OPTIMIZATION 1: Parallel Fetching
+  // Instead of waiting 450ms for winner, THEN 450ms for loser (900ms total),
+  // we fire both at the exact same time using Promise.all (450ms total).
+  const [winnerStats, loserStats] = await Promise.all([
+    getUserStats(winnerId),
+    getUserStats(loserId)
+  ]);
 
   if (winnerStats && loserStats) {
       const eloResult = calculateNewRatings(winnerStats.elo_rating, loserStats.elo_rating);
       
-      // Update Users Table
-      await updateUserStats(winnerId, eloResult.winnerNew, true);
-      await updateUserStats(loserId, eloResult.loserNew, false);
-      
-      // Log it to the History Table for the graphs!
-      await logRatingChange(winnerId, matchId, eloResult.winnerDiff, eloResult.winnerNew);
-      await logRatingChange(loserId, matchId, eloResult.loserDiff, eloResult.loserNew);
+      // OPTIMIZATION 2: Parallel Database Updates
+      // These 4 updates are totally independent. They don't need to wait for each other.
+      // Sequential time: 4 x 450ms = 1800ms
+      // Parallel time: 450ms total
+      await Promise.all([
+        updateUserStats(winnerId, eloResult.winnerNew, true),
+        updateUserStats(loserId, eloResult.loserNew, false),
+        logRatingChange(winnerId, matchId, eloResult.winnerDiff, eloResult.winnerNew),
+        logRatingChange(loserId, matchId, eloResult.loserDiff, eloResult.loserNew)
+      ]);
 
-      // Notify both players about the result
-      await notify(winnerId, 'MATCH_WON', '🏆 Victory!',
-        `You won! Rating: ${winnerStats.elo_rating} → ${eloResult.winnerNew} (+${eloResult.winnerDiff})`, matchId);
-      await notify(loserId, 'MATCH_LOST', 'Match Over',
-        `Rating: ${loserStats.elo_rating} → ${eloResult.loserNew} (${eloResult.loserDiff})`, matchId);
+      // OPTIMIZATION 3: "Fire and Forget" Background Tasks
+      // We do NOT use 'await' here. Why make the winner stare at a loading screen
+      // just because the server is saving a notification for the loser?
+      // We fire the promise and let it run in the background. The .catch() prevents crashes if it fails.
+      Promise.all([
+        notify(winnerId, 'MATCH_WON', '🏆 Victory!', 
+          `You won! Rating: ${winnerStats.elo_rating} → ${eloResult.winnerNew} (+${eloResult.winnerDiff})`, matchId),
+        notify(loserId, 'MATCH_LOST', 'Match Over', 
+          `Rating: ${loserStats.elo_rating} → ${eloResult.loserNew} (${eloResult.loserDiff})`, matchId)
+      ]).catch(err => console.error('Background notification failed:', err));
 
       updatedMatch.eloChange = eloResult;
   }
