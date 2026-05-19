@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { fetchUserBadges, fetchRatingHistory } from '../controllers/userController.js';
+import { fetchUserBadges, fetchRatingHistory, fetchUserProfile } from '../controllers/userController.js';
 import { report, blockUserHandler, unblockUserHandler, getBlockedList } from '../controllers/moderationController.js';
 import { authenticate } from '../middleware/auth.middleware.js';
 import { validate } from '../middleware/validate.middleware.js';
@@ -12,6 +12,7 @@ router.get('/blocked', authenticate, getBlockedList);
 // Public profile data
 router.get('/:id/badges', fetchUserBadges);
 router.get('/:id/rating-history', fetchRatingHistory);
+router.get('/:id', fetchUserProfile);
 
 // Moderation — report and block users (auth required)
 router.post('/:id/report', authenticate, validate([

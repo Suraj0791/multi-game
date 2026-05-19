@@ -1,6 +1,7 @@
 import { registerUser } from '../services/userService.js';
 import { getUserBadges } from '../services/userService.js';
 import { getRatingHistory } from '../models/Rating.js';
+import { findById, getUserStats } from '../models/User.js';
 
 export async function register(req, res) {
   try {
@@ -13,6 +14,28 @@ export async function register(req, res) {
     });
   } catch (error) {
     res.status(400).json({ error: error.message });
+  }
+}
+
+export async function fetchUserProfile(req, res) {
+  try {
+    const userId = req.params.id;
+    const user = await findById(userId);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    const stats = await getUserStats(userId);
+    res.status(200).json({
+      id: user.id,
+      username: user.username,
+      eloRating: stats?.elo_rating || 1000,
+      wins: stats?.total_wins || 0,
+      losses: stats?.total_losses || 0,
+      gamesPlayed: (stats?.total_wins || 0) + (stats?.total_losses || 0)
+    });
+  } catch (error) {
+    console.error("Error fetching profile:", error);
+    res.status(500).json({ error: "Failed to fetch user profile" });
   }
 }
 

@@ -11,7 +11,8 @@
 // you change the PAGE, not this component.
 
 import { Button } from '@/components/ui/button'
-import { LogIn, LogOut, Play } from 'lucide-react'
+import { LogIn, LogOut, Play, Share2 } from 'lucide-react'
+import { toast } from 'sonner'
 
 export default function ActionButtons({
   canJoin,
@@ -24,8 +25,13 @@ export default function ActionButtons({
   isLeaving,    // loading state for leave
   isStarting,   // loading state for start
 }) {
+  const handleCopyInvite = () => {
+    navigator.clipboard.writeText(window.location.href)
+    toast.success('Tournament invite link copied to clipboard!')
+  }
+
   return (
-    <div className="flex gap-2">
+    <div className="flex flex-wrap gap-2">
       {canJoin && (
         <Button onClick={onJoin} disabled={isJoining} className="gap-1.5">
           <LogIn className="h-4 w-4" />
@@ -46,6 +52,11 @@ export default function ActionButtons({
           {isStarting ? 'Starting...' : 'Start Tournament'}
         </Button>
       )}
+
+      <Button onClick={handleCopyInvite} variant="outline" className="gap-1.5">
+        <Share2 className="h-4 w-4" />
+        Copy Invite Link
+      </Button>
     </div>
   )
 }
