@@ -20,12 +20,13 @@ import { useParams } from 'react-router-dom'
 import { useTournament } from '@/hooks/useTournaments'
 import { usePlayers, useJoinTournament, useLeaveTournament, useStartTournament, useBracket } from '@/hooks/usePlayers'
 import useAuthStore from '@/stores/authStore'
+import useSocket from '@/hooks/useSocket'
 
-// Dumb components — they just render what they're given
 import TournamentHeader from '@/components/tournaments/TournamentHeader'
 import PlayerList from '@/components/tournaments/PlayerList'
 import ActionButtons from '@/components/tournaments/ActionButtons'
 import BracketView from '@/components/bracket/BracketView'
+import ChatPanel from '@/components/chat/ChatPanel'
 
 export default function TournamentDetailPage() {
   // Get the tournament ID from the URL (/tournaments/:id)
@@ -34,6 +35,7 @@ export default function TournamentDetailPage() {
 
   // Get current user's ID from Zustand
   const userId = useAuthStore((state) => state.userId)
+  const socket = useSocket()
 
   // ============================================================
   // SERVER STATE — 3 parallel data fetches
@@ -103,14 +105,20 @@ export default function TournamentDetailPage() {
         isStarting={startMutation.isPending}
       />
 
-      {/* Two-column layout: Players on left, Bracket on right */}
+      {/* Three-section layout */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Section C: Player list (takes 1 column) */}
-        <div className="lg:col-span-1">
+        {/* Left: Player list */}
+        <div className="lg:col-span-1 space-y-6">
           <PlayerList players={players || []} maxPlayers={tournament.maxPlayers} />
+          {/* Chat below player list */}
+          <ChatPanel
+            socket={socket}
+            tournamentId={id}
+            userId={userId}
+          />
         </div>
 
-        {/* Section D: Bracket (takes 2 columns, only shown after tournament starts) */}
+        {/* Right: Bracket (only after tournament starts) */}
         <div className="lg:col-span-2">
           {showBracket && bracket && (
             <BracketView

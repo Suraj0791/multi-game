@@ -22,7 +22,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
 import { Trophy, Clock, CheckCircle, XCircle } from 'lucide-react'
 
 export default function TriviaGame({ socket, matchId, player1Id, player2Id, currentUserId }) {

@@ -8,7 +8,7 @@
 // Same pattern (Page → Hook → API), just less state.
 
 import { useNavigate } from 'react-router-dom'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { BarChart3, Trophy, Medal } from 'lucide-react'
 import { useLeaderboard } from '@/hooks/useUsers'

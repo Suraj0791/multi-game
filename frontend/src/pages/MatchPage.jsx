@@ -32,7 +32,7 @@ async function getMatch(tournamentId, matchId) {
 export default function MatchPage() {
   const { id: tournamentId, matchId } = useParams()
   const userId = useAuthStore((state) => state.userId)
-  const socketRef = useSocket()
+  const socket = useSocket()
 
   // Fetch match data to know game type + player IDs
   const { data: match, isLoading } = useQuery({
@@ -64,7 +64,7 @@ export default function MatchPage() {
   return (
     <div className="py-4">
       <GameComponent
-        socket={socketRef.current}
+        socket={socket}
         matchId={Number(matchId)}
         player1Id={match.player1Id}
         player2Id={match.player2Id}
