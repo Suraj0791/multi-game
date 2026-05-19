@@ -14,6 +14,7 @@ import useSocket from '@/hooks/useSocket'
 import useAuthStore from '@/stores/authStore'
 import api from '@/api/axiosClient'
 import TriviaGame from '@/components/games/TriviaGame'
+import QuickDrawGame from '@/components/games/QuickDrawGame'
 
 // Fetch match details — we need to know the game type and player IDs
 async function getMatch(tournamentId, matchId) {
@@ -57,10 +58,12 @@ export default function MatchPage() {
   }
 
   // Decide which game component to render based on game type
-  // For now we only have Trivia. Quick Draw will be added later.
+  // The match object has a gameType field from the tournament
+  const GameComponent = match.gameType === 'QUICK_DRAW' ? QuickDrawGame : TriviaGame
+
   return (
     <div className="py-4">
-      <TriviaGame
+      <GameComponent
         socket={socketRef.current}
         matchId={Number(matchId)}
         player1Id={match.player1Id}

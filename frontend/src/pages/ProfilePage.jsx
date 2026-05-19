@@ -5,7 +5,7 @@
 // One useQuery for user data. No mutations. No forms.
 
 import { useParams } from 'react-router-dom'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent,  CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { User, Trophy, Target, TrendingUp } from 'lucide-react'
 import { useUserProfile } from '@/hooks/useUsers'
