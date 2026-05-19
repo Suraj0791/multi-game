@@ -1,48 +1,64 @@
 // ============================================================
-// STEP 2: ADD STATE — Form state + error/loading state
+// STEP 3: WIRE THE API — The form now talks to the backend
 // ============================================================
-// WHAT CHANGED from Step 1:
-//   1. Added useForm() — React Hook Form now controls the inputs
-//   2. Added useState for error message (API errors)
-//   3. Connected inputs to the form via register()
-//   4. Added onSubmit handler (just console.log for now)
+// WHAT CHANGED from Step 2:
+//   1. Imported loginUser (the HTTP call from authApi.js)
+//   2. Imported useAuthStore (to save the token)
+//   3. Imported useNavigate (to redirect after login)
+//   4. onSubmit now calls the REAL API instead of console.log
 //
-// WHAT register() DOES:
-//   register("email") returns { onChange, onBlur, name, ref }
-//   These get spread onto the <Input /> so React Hook Form
-//   can track what the user types WITHOUT us writing useState.
+// THE FLOW:
+//   User clicks "Sign in"
+//   → handleSubmit validates (fields not empty?)
+//   → onSubmit runs
+//   → loginUser(email, password) sends POST /auth/login
+//   → Backend responds with { userId, token }
+//   → authStore.login(token, userId) saves to Zustand + localStorage
+//   → navigate('/tournaments') redirects to the app
+//   → ProtectedRoute re-checks → token exists → shows the page
 //
-// WHY NOT useState for each field?
-//   With useState: const [email, setEmail] = useState('')
-//   You'd need onChange handlers, value props, separate validation...
-//   React Hook Form does ALL of that with one register() call.
+// IF IT FAILS:
+//   → catch block catches the error
+//   → setError shows the message ("Invalid credentials")
+//   → User sees red error box, can try again
 
 import { useState } from 'react'
 import { useForm } from 'react-hook-form'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { Trophy } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
+import { loginUser } from '@/api/authApi'
+import useAuthStore from '@/stores/authStore'
 
 export default function LoginPage() {
-  // FORM STATE — React Hook Form handles email + password
+  const navigate = useNavigate()
+  const login = useAuthStore((state) => state.login)
+
   const {
-    register,           // connects an input to the form
-    handleSubmit,       // wraps our onSubmit, runs validation first
-    formState: { isSubmitting }  // true while onSubmit is running (loading state)
+    register,
+    handleSubmit,
+    formState: { isSubmitting }
   } = useForm()
 
-  // ERROR STATE — shows API error messages ("Invalid credentials")
   const [error, setError] = useState(null)
 
-  // HANDLER — what happens when form is submitted
-  // Right now: just logs the data. Step 3 will wire the API.
   const onSubmit = async (data) => {
-    setError(null)  // clear previous error
-    console.log('Form submitted:', data)
-    // data = { email: "whatever@typed.com", password: "whatever" }
-    // Next step: call the API here
+    setError(null)
+    try {
+      // STEP A: Call the backend API
+      const response = await loginUser(data.email, data.password)
+
+      // STEP B: Save token to Zustand + localStorage
+      login(response.token, response.userId)
+
+      // STEP C: Redirect to the app
+      navigate('/tournaments')
+    } catch (err) {
+      // Show the backend error message (or a generic one)
+      setError(err.response?.data?.error || 'Login failed. Try again.')
+    }
   }
 
   return (
