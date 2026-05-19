@@ -19,8 +19,8 @@
 //   Hook = Service (business logic + caching rules)
 //   Page = Controller (handles the request/UI)
 
-import { useQuery } from '@tanstack/react-query'
-import { getTournaments, getTournamentById } from '@/api/tournamentApi'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { getTournaments, getTournamentById, createTournament } from '@/api/tournamentApi'
 
 // Fetch ALL tournaments (for the list page)
 export function useTournaments() {
@@ -55,4 +55,32 @@ export function useTournament(id) {
     // Don't fetch if there's no ID (prevents errors during initial render)
     enabled: !!id,
   })
+}
+
+// CREATE a tournament (for the create page)
+// useMutation is for WRITING data (POST/PUT/DELETE)
+// useQuery is for READING data (GET)
+export function useCreateTournament() {
+  // queryClient lets us manually interact with the cache
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    // mutationFn — the function that sends the POST request
+    mutationFn: createTournament,
+
+    // onSuccess — runs AFTER the POST succeeds
+    // This is where CACHE INVALIDATION happens
+    onSuccess: () => {
+      // "Hey React Query, the ['tournaments'] cache is now outdated.
+      //  Next time someone needs it, refetch from the server."
+      queryClient.invalidateQueries({ queryKey: ['tournaments'] })
+    },
+  })
+  // WHAT THIS RETURNS:
+  // {
+  //   mutate: function to trigger the mutation (fire and forget)
+  //   mutateAsync: function that returns a promise (for await)
+  //   isPending: true while the POST is running
+  //   error: Error object or null
+  // }
 }

@@ -26,3 +26,41 @@ export async function createTournament(tournamentData) {
   const response = await api.post('/tournaments', tournamentData)
   return response.data
 }
+
+// ============================================================
+// PLAYER ENDPOINTS
+// ============================================================
+
+// GET /tournaments/:id/players → array of player objects
+export async function getPlayers(tournamentId) {
+  const response = await api.get(`/tournaments/${tournamentId}/players`)
+  return response.data.data
+}
+
+// POST /tournaments/:id/join → join a tournament
+export async function joinTournament(tournamentId) {
+  const response = await api.post(`/tournaments/${tournamentId}/join`)
+  return response.data
+}
+
+// DELETE /tournaments/:id/leave → leave a tournament
+export async function leaveTournament(tournamentId) {
+  const response = await api.delete(`/tournaments/${tournamentId}/leave`)
+  return response.data
+}
+
+// ============================================================
+// TOURNAMENT ACTIONS
+// ============================================================
+
+// PUT /tournaments/:id/start → start the tournament (host only)
+export async function startTournament(tournamentId) {
+  const response = await api.put(`/tournaments/${tournamentId}/start`)
+  return response.data
+}
+
+// GET /tournaments/:id/bracket → bracket with rounds and matches
+export async function getBracket(tournamentId) {
+  const response = await api.get(`/tournaments/${tournamentId}/bracket`)
+  return response.data.data
+}
