@@ -21,6 +21,7 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { getTournaments, getTournamentById, createTournament } from '@/api/tournamentApi'
+import { toast } from 'sonner'
 
 // Fetch ALL tournaments (for the list page)
 export function useTournaments() {
@@ -71,9 +72,11 @@ export function useCreateTournament() {
     // onSuccess — runs AFTER the POST succeeds
     // This is where CACHE INVALIDATION happens
     onSuccess: () => {
-      // "Hey React Query, the ['tournaments'] cache is now outdated.
-      //  Next time someone needs it, refetch from the server."
+      toast.success('Tournament created!')
       queryClient.invalidateQueries({ queryKey: ['tournaments'] })
+    },
+    onError: (err) => {
+      toast.error(err.response?.data?.error || 'Failed to create tournament')
     },
   })
   // WHAT THIS RETURNS:

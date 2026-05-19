@@ -6,6 +6,7 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { getPlayers, joinTournament, leaveTournament, startTournament, getBracket } from '@/api/tournamentApi'
+import { toast } from 'sonner'
 
 // Fetch players in a specific tournament
 export function usePlayers(tournamentId) {
@@ -22,7 +23,11 @@ export function useJoinTournament(tournamentId) {
   return useMutation({
     mutationFn: () => joinTournament(tournamentId),
     onSuccess: () => {
+      toast.success('Joined tournament!')
       queryClient.invalidateQueries({ queryKey: ['players', tournamentId] })
+    },
+    onError: (err) => {
+      toast.error(err.response?.data?.error || 'Failed to join')
     },
   })
 }
@@ -33,7 +38,11 @@ export function useLeaveTournament(tournamentId) {
   return useMutation({
     mutationFn: () => leaveTournament(tournamentId),
     onSuccess: () => {
+      toast.success('Left tournament')
       queryClient.invalidateQueries({ queryKey: ['players', tournamentId] })
+    },
+    onError: (err) => {
+      toast.error(err.response?.data?.error || 'Failed to leave')
     },
   })
 }
@@ -44,12 +53,13 @@ export function useStartTournament(tournamentId) {
   return useMutation({
     mutationFn: () => startTournament(tournamentId),
     onSuccess: () => {
-      // Status changed from REGISTRATION → IN_PROGRESS
+      toast.success('Tournament started!')
       queryClient.invalidateQueries({ queryKey: ['tournament', tournamentId] })
-      // Bracket was just generated
       queryClient.invalidateQueries({ queryKey: ['bracket', tournamentId] })
-      // Player list might need refresh too
       queryClient.invalidateQueries({ queryKey: ['players', tournamentId] })
+    },
+    onError: (err) => {
+      toast.error(err.response?.data?.error || 'Failed to start')
     },
   })
 }
