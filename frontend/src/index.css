@@ -1,101 +1,30 @@
 /* ============================================================
    TOURNEYHUB DESIGN SYSTEM
    ============================================================
-
-   This file does 3 things:
-   1. Imports Tailwind CSS (all utility classes like p-4, flex, etc.)
-   2. Imports Inter font from Google Fonts
-   3. Defines our custom design tokens (colors, border radius)
-
-   WHY HERE and not a config file?
-   Tailwind v4 uses CSS-first configuration. Everything lives in CSS.
-   No tailwind.config.js needed.
+   Tailwind v4 CSS-first config + shadcn/ui theming.
+   
+   Our palette: Dark charcoal base + Gold/Amber accent.
+   Professional gaming platform feel. NOT the generic AI look.
    ============================================================ */
 
 @import "tailwindcss";
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
-@import "@fontsource-variable/geist";
 
 @custom-variant dark (&:is(.dark *));
 
 /* ============================================================
-   CUSTOM THEME — Our color palette
+   SHADCN THEME VARIABLES — mapped to our tournament palette
    ============================================================
-
-   @theme tells Tailwind: "these are custom values I want to use 
-   as utility classes." After this, we can write:
-   - bg-background (instead of bg-[#0F1116])
-   - text-foreground (instead of text-[#E8E8ED])
-   - border-border (instead of border-[#2A2D35])
-
-   This is the SINGLE SOURCE OF TRUTH for all colors.
-   Change a color here → changes everywhere in the app.
+   shadcn components read these CSS variables.
+   We set them to our custom dark colors so every Button, Card,
+   Input etc. automatically uses our design system.
    ============================================================ */
-
-@theme {
-  /* Base colors */
-  --color-background: #0F1116;
-  --color-surface: #1A1D24;
-  --color-surface-hover: #22252E;
-  --color-border: #2A2D35;
-
-  /* Text colors */
-  --color-foreground: #E8E8ED;
-  --color-muted: #8B8D97;
-  --color-muted-foreground: #6B6D75;
-
-  /* Accent — Gold/Amber (tournament trophy energy) */
-  --color-accent: #F59E0B;
-  --color-accent-hover: #D97706;
-  --color-accent-foreground: #0F1116;
-
-  /* Status colors */
-  --color-success: #22C55E;
-  --color-danger: #EF4444;
-  --color-warning: #F59E0B;
-  --color-info: #3B82F6;
-
-  /* Typography */
-  --font-sans: 'Inter', system-ui, sans-serif;
-
-  /* Border radius */
-  --radius-sm: 4px;
-  --radius-md: 6px;
-  --radius-lg: 8px;
-  --radius-xl: 12px;
-}
-
-/* ============================================================
-   BASE STYLES — Applied to the entire app
-   ============================================================ */
-
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-}
-
-body {
-  font-family: var(--font-sans);
-  background-color: var(--color-background);
-  color: var(--color-foreground);
-
-  /* Smooth text rendering */
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
-
-/* Remove default focus outlines, add our own accessible one */
-*:focus-visible {
-  outline: 2px solid var(--color-accent);
-  outline-offset: 2px;
-}
 
 @theme inline {
-  --font-heading: var(--font-sans);
-  --font-sans: 'Geist Variable', sans-serif;
+  --font-heading: 'Inter', system-ui, sans-serif;
+  --font-sans: 'Inter', system-ui, sans-serif;
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -136,74 +65,77 @@ body {
   --radius-4xl: calc(var(--radius) * 2.6);
 }
 
-:root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+/* ============================================================
+   OUR CUSTOM COLORS — Additional tokens beyond shadcn
+   These are for tournament-specific UI (status badges, etc.)
+   Usage: bg-surface, text-success, text-danger, bg-accent-gold
+   ============================================================ */
+
+@theme {
+  --color-surface: #1A1D24;
+  --color-surface-hover: #22252E;
+  --color-success: #22C55E;
+  --color-danger: #EF4444;
+  --color-warning: #F59E0B;
+  --color-info: #3B82F6;
+  --color-accent-gold: #F59E0B;
+  --color-accent-gold-hover: #D97706;
 }
 
-.dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+/* ============================================================
+   ROOT THEME — Dark mode by default (gaming platform)
+   We skip light mode entirely. Dark is our only theme.
+   ============================================================ */
+
+:root {
+  /* Core */
+  --background: #0F1116;
+  --foreground: #E8E8ED;
+
+  /* Cards & Popovers */
+  --card: #1A1D24;
+  --card-foreground: #E8E8ED;
+  --popover: #1A1D24;
+  --popover-foreground: #E8E8ED;
+
+  /* Primary = Gold (our accent) */
+  --primary: #F59E0B;
+  --primary-foreground: #0F1116;
+
+  /* Secondary = Slightly lighter surface */
+  --secondary: #22252E;
+  --secondary-foreground: #E8E8ED;
+
+  /* Muted = For subtle text and backgrounds */
+  --muted: #22252E;
+  --muted-foreground: #8B8D97;
+
+  /* Accent = Same as primary for consistency */
+  --accent: #22252E;
+  --accent-foreground: #E8E8ED;
+
+  /* Destructive = Red for errors/danger */
+  --destructive: #EF4444;
+
+  /* Borders & Inputs */
+  --border: #2A2D35;
+  --input: #2A2D35;
+  --ring: #F59E0B;
+
+  /* Charts (for rating history) */
+  --chart-1: #F59E0B;
+  --chart-2: #22C55E;
+  --chart-3: #3B82F6;
+  --chart-4: #A855F7;
+  --chart-5: #EF4444;
+
+  /* Border radius */
+  --radius: 0.5rem;
 }
+
+/* ============================================================
+   BASE STYLES
+   ============================================================ */
 
 @layer base {
   * {
@@ -215,4 +147,10 @@ body {
   html {
     @apply font-sans;
   }
+}
+
+/* Smooth text rendering */
+body {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
