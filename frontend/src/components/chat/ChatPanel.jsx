@@ -151,39 +151,55 @@ export default function ChatPanel({ socket, tournamentId, userId }) {
 
       <CardContent className="flex-1 flex flex-col overflow-hidden p-3 pt-0">
         {/* Messages area — scrollable */}
-        <div className="flex-1 overflow-y-auto space-y-2 mb-3">
+        <div className="flex-1 overflow-y-auto space-y-3 mb-3 pr-1 scrollbar-thin">
           {messages.length === 0 && (
-            <p className="text-xs text-muted-foreground text-center py-4">
-              No messages yet. Say hi!
+            <p className="text-xs text-neutral-500 text-center py-8">
+              No messages yet. Say hi to the lobby!
             </p>
           )}
 
-          {messages.map((msg) => (
-            <div
-              key={msg.id}
-              className={`text-sm ${
-                msg.isSystem
-                  ? "text-center text-xs text-muted-foreground italic"
-                  : ""
-              }`}
-            >
-              {!msg.isSystem && (
-                <>
-                  <span
-                    className={`font-medium ${
-                      Number(msg.userId) === Number(userId)
-                        ? "text-primary"
-                        : "text-foreground"
-                    }`}
-                  >
-                    {msg.username}
+          {messages.map((msg) => {
+            if (msg.isSystem) {
+              return (
+                <div key={msg.id} className="flex justify-center my-1">
+                  <span className="text-[11px] text-neutral-500 bg-neutral-900 border border-neutral-800/80 rounded-full px-3 py-0.5 font-medium italic">
+                    {msg.message}
                   </span>
-                  <span className="text-muted-foreground">: </span>
-                </>
-              )}
-              <span className="text-foreground">{msg.message}</span>
-            </div>
-          ))}
+                </div>
+              );
+            }
+
+            const isMe = Number(msg.userId) === Number(userId);
+            const formattedTime = msg.createdAt 
+              ? new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+              : '';
+
+            if (isMe) {
+              return (
+                <div key={msg.id} className="flex flex-col items-end space-y-1 my-2">
+                  <div className="flex items-center gap-1.5 px-1 text-xs">
+                    <span className="text-neutral-500 text-[10px]">{formattedTime}</span>
+                    <span className="font-semibold text-neutral-400">You</span>
+                  </div>
+                  <div className="bg-gradient-to-br from-amber-500/20 to-amber-600/10 border border-amber-500/30 text-amber-50 rounded-2xl rounded-tr-sm px-3 py-2 text-sm shadow-md select-text break-words max-w-[85%]">
+                    {msg.message}
+                  </div>
+                </div>
+              );
+            }
+
+            return (
+              <div key={msg.id} className="flex flex-col items-start space-y-1 my-2">
+                <div className="flex items-center gap-1.5 px-1 text-xs">
+                  <span className="font-semibold text-amber-400/90">{msg.username}</span>
+                  <span className="text-neutral-500 text-[10px]">{formattedTime}</span>
+                </div>
+                <div className="bg-neutral-900/90 border border-neutral-800 text-neutral-200 rounded-2xl rounded-tl-sm px-3 py-2 text-sm shadow-sm select-text break-words max-w-[85%]">
+                  {msg.message}
+                </div>
+              </div>
+            );
+          })}
           {/* Invisible div at the bottom for auto-scroll */}
           <div ref={messagesEndRef} />
         </div>
