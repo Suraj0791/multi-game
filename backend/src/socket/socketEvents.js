@@ -11,6 +11,7 @@ const activeTriviaGames = {};
 // Chat state — stored in memory, per socket connection
 const chatUsernames = {}; // { socketId: username } — cached so we don't query DB every message
 const lastChatTime = {}; // { socketId: timestamp } — for rate limiting (1 msg/sec)
+const socketJoinedRooms = {}; // { socketId: { roomName: true } }
 
 async function sendNextTriviaQuestion(io, matchId, player1Id, player2Id) {
   const game = activeTriviaGames[matchId];

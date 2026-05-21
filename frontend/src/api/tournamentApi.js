@@ -67,3 +67,9 @@ export async function getBracket(tournamentId) {
   const response = await api.get(`/tournaments/${tournamentId}/bracket`);
   return response.data;
 }
+
+// GET /tournaments/:id/chat → array of chat messages
+export async function getChatHistory(tournamentId) {
+  const response = await api.get(`/tournaments/${tournamentId}/chat`);
+  return response.data;
+}

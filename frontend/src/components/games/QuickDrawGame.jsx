@@ -68,12 +68,22 @@ export default function QuickDrawGame({
   useEffect(() => {
     if (!socket) return;
 
-    socket.emit("join_match", {
-      matchId,
-      playerId: Number(currentUserId),
-      player1Id,
-      player2Id,
-    });
+    const joinMatch = () => {
+      socket.emit("join_match", {
+        matchId,
+        playerId: Number(currentUserId),
+        player1Id,
+        player2Id,
+      });
+    };
+
+    // Join immediately if already connected
+    if (socket.connected) {
+      joinMatch();
+    }
+
+    // Re-join on connection/reconnection
+    socket.on("connect", joinMatch);
 
     const onGameStatus = (data) => {
       setGameStatus("playing");
@@ -117,6 +127,7 @@ export default function QuickDrawGame({
     socket.on("match_over", onMatchOver);
 
     return () => {
+      socket.off("connect", joinMatch);
       socket.off("game_status", onGameStatus);
       socket.off("receive_stroke", onReceiveStroke);
       socket.off("wrong_guess", onWrongGuess);

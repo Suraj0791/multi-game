@@ -21,6 +21,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { MessageSquare, Send } from "lucide-react";
+import { getChatHistory } from "@/api/tournamentApi";
 
 export default function ChatPanel({ socket, tournamentId, userId }) {
   const [messages, setMessages] = useState([]);
@@ -36,6 +37,24 @@ export default function ChatPanel({ socket, tournamentId, userId }) {
   };
 
   // ============================================================
+  // API: Load existing chat history
+  // ============================================================
+  useEffect(() => {
+    if (!tournamentId) return;
+
+    const loadHistory = async () => {
+      try {
+        const history = await getChatHistory(tournamentId);
+        setMessages(history || []);
+      } catch (err) {
+        console.error("❌ [ChatPanel] Failed to load chat history:", err);
+      }
+    };
+
+    loadHistory();
+  }, [tournamentId]);
+
+  // ============================================================
   // SOCKET: Join chat room + listen for messages
   // ============================================================
   useEffect(() => {
@@ -44,7 +63,13 @@ export default function ChatPanel({ socket, tournamentId, userId }) {
     // Listen for new messages
     const onMessage = (data) => {
       console.log("💬 [ChatPanel] Message received:", data);
-      setMessages((prev) => [...prev, data]);
+      setMessages((prev) => {
+        // Prevent duplicate messages if they have the same ID
+        if (data.id && prev.some((m) => m.id === data.id)) {
+          return prev;
+        }
+        return [...prev, data];
+      });
     };
 
     // Listen for user join notifications
@@ -53,7 +78,7 @@ export default function ChatPanel({ socket, tournamentId, userId }) {
       setMessages((prev) => [
         ...prev,
         {
-          id: Date.now(),
+          id: Date.now() + Math.random(),
           username: "System",
           message: data.message,
           isSystem: true,
@@ -85,6 +110,8 @@ export default function ChatPanel({ socket, tournamentId, userId }) {
     socket.on("connect", joinRoom);
 
     return () => {
+      // Leave the chat room on unmount so we don't receive messages for this room anymore
+      socket.emit("chat:leave", { tournamentId, userId });
       socket.off("connect", joinRoom);
       socket.off("chat:message", onMessage);
       socket.off("chat:user_joined", onUserJoined);
