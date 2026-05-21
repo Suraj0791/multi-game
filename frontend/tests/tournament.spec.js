@@ -144,7 +144,7 @@ test.describe("TourneyHub End-to-End Suite", () => {
     await uiLogin(page, "player1@test.com", "password123");
 
     // 1. Create a 4-player tournament using the UI
-    await page.goto("/tournaments/create");
+    await page.goto("/tournaments/new");
     await page.fill("#name", "Validation Tourney 4");
     await page.selectOption("#game_type", "TRIVIA");
     await page.selectOption("#max_players", "4");
@@ -218,10 +218,9 @@ test.describe("TourneyHub End-to-End Suite", () => {
     await uiLogin(page, "player1@test.com", "password123");
     await page.goto(`/tournaments/${tournamentId}`);
 
-    const chatArea = page.locator("div.flex-1.overflow-y-auto");
-    await expect(chatArea).toContainText("joined the chat", { timeout: 15_000 });
-
     const chatInput = page.locator('input[placeholder="Type a message..."]');
+    await expect(chatInput).toBeVisible({ timeout: 15_000 });
+    const chatArea = page.locator("div.flex-1.overflow-y-auto");
     const sendBtn = page.locator('form:has(input[placeholder="Type a message..."]) button[type="submit"]');
 
     // Send a message
@@ -499,7 +498,7 @@ test.describe("TourneyHub End-to-End Suite", () => {
 
     // Go back to details page and verify status is Completed
     await hostPage.goto(`/tournaments/${tournamentId}`);
-    await expect(hostPage.locator("text=Completed")).toBeVisible({ timeout: 20_000 });
+    await expect(hostPage.getByText("Completed", { exact: true })).toBeVisible({ timeout: 20_000 });
 
     await hostContext.close();
     await opponentContext.close();

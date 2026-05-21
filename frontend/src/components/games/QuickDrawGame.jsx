@@ -28,7 +28,8 @@
 //   ON:   game_status    → { message, wordToDraw? }
 //   ON:   receive_stroke → { x, y, type }
 //   ON:   wrong_guess    → { message: "Try again!" }
-//   ON:   match_oveimport { useState, useEffect, useRef, useCallback } from "react";
+//   ON:   match_over
+import { useState, useEffect, useRef, useCallback } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
