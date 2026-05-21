@@ -1,4 +1,4 @@
-import { addPlayer, findPlayer, getPlayersByTournament, removePlayer, countPlayers } from '../models/TournamentPlayer.js';
+import { addPlayer, findPlayer, getPlayersByTournament, removePlayer, countPlayers, updatePlayerPaymentStatus } from '../models/TournamentPlayer.js';
 import { getTournamentById as fetchTournamentById } from '../models/Tournament.js';
 
 // JOIN a tournament
@@ -29,6 +29,11 @@ export async function joinTournament(tournamentId, playerId) {
 
   // All checks passed — add the player
   const entry = await addPlayer(tournamentId, playerId);
+
+  // If the tournament is free, auto-complete the player's payment status
+  if (Number(tournament.entry_fee) === 0) {
+    await updatePlayerPaymentStatus(tournamentId, playerId, 'COMPLETED');
+  }
 
   return {
     tournamentId: entry.tournament_id,

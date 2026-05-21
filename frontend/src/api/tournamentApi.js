@@ -73,3 +73,9 @@ export async function getChatHistory(tournamentId) {
   const response = await api.get(`/tournaments/${tournamentId}/chat`);
   return response.data;
 }
+
+// POST /tournaments/:id/pay → create a payment order
+export async function createPaymentOrder(tournamentId) {
+  const response = await api.post(`/tournaments/${tournamentId}/pay`);
+  return response.data;
+}

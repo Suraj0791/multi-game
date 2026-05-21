@@ -1,5 +1,6 @@
 import { getRandomWord } from "../games/gameConstants.js";
 import { completeMatch } from "../services/matchService.js";
+import { getMatchById } from "../models/Match.js";
 import { TriviaGame } from "../games/TriviaGame.js";
 import { sendMessage } from "../services/chatService.js";
 import { findById } from "../models/User.js";
@@ -34,6 +35,7 @@ async function sendNextTriviaQuestion(io, matchId, player1Id, player2Id) {
   }
 
   const question = game.getCurrentQuestion();
+  game.questionStartTime = Date.now();
   io.to(roomName).emit("trivia:new_question", { question, timerSeconds: 10 });
 
   game.timeoutId = setTimeout(() => {
@@ -56,25 +58,59 @@ export default function setupSocketEvents(io) {
     console.log(`📞 User connected: ${socket.id}`);
 
     // TRIVIA GAME EVENTS
-    socket.on("trivia:join", (data) => {
-      const { matchId, player1Id, player2Id } = data;
-      const roomName = `match_${matchId}`;
-      socket.join(roomName);
+    socket.on("trivia:join", async (data) => {
+      const { matchId, playerId } = data;
+      const numericPlayerId = Number(playerId);
+      if (isNaN(numericPlayerId) || !matchId) {
+        socket.emit("error", { message: "Invalid payload" });
+        return;
+      }
 
-      if (!activeTriviaGames[matchId]) {
-        activeTriviaGames[matchId] = new TriviaGame(
-          matchId,
-          player1Id,
-          player2Id
-        );
+      try {
+        const match = await getMatchById(matchId);
+        if (!match) {
+          socket.emit("error", { message: "Match not found" });
+          return;
+        }
 
-        io.to(roomName).emit("trivia:started", {
-          message: "Game starting in 3 seconds!",
-        });
+        if (numericPlayerId !== match.player_1_id && numericPlayerId !== match.player_2_id) {
+          socket.emit("error", { message: "Access denied. Only match players can join this match." });
+          return;
+        }
 
-        setTimeout(() => {
-          sendNextTriviaQuestion(io, matchId, player1Id, player2Id);
-        }, 3000);
+        const roomName = `match_${matchId}`;
+        socket.join(roomName);
+
+        if (!activeTriviaGames[matchId]) {
+          activeTriviaGames[matchId] = new TriviaGame(
+            matchId,
+            match.player_1_id,
+            match.player_2_id
+          );
+
+          io.to(roomName).emit("trivia:started", {
+            message: "Game starting in 3 seconds!",
+          });
+
+          setTimeout(() => {
+            sendNextTriviaQuestion(io, matchId, match.player_1_id, match.player_2_id);
+          }, 3000);
+        } else {
+          // Reconnection Synchronization
+          const game = activeTriviaGames[matchId];
+          socket.emit("trivia:started", { message: "Reconnected to active match!" });
+          socket.emit("trivia:score_update", { scores: game.scores });
+
+          if (!game.isGameOver() && game.questions[game.currentQuestionIndex]) {
+            const question = game.getCurrentQuestion();
+            const timeElapsed = game.questionStartTime ? Date.now() - game.questionStartTime : 0;
+            const timeLeft = Math.max(0, Math.ceil((10000 - timeElapsed) / 1000));
+            socket.emit("trivia:new_question", { question, timerSeconds: timeLeft });
+          }
+        }
+      } catch (err) {
+        console.error("Error in trivia:join:", err);
+        socket.emit("error", { message: "Server error" });
       }
     });
 
@@ -83,7 +119,13 @@ export default function setupSocketEvents(io) {
       const game = activeTriviaGames[matchId];
       if (!game) return;
 
-      const result = game.submitAnswer(playerId, answer, timeTakenMs);
+      const numericPlayerId = Number(playerId);
+      if (numericPlayerId !== game.player1Id && numericPlayerId !== game.player2Id) {
+        socket.emit("error", { message: "Access denied. You are not a player in this match." });
+        return;
+      }
+
+      const result = game.submitAnswer(numericPlayerId, answer, timeTakenMs);
       socket.emit("trivia:answer_feedback", result);
       io.to(`match_${matchId}`).emit("trivia:score_update", {
         scores: game.scores,
@@ -111,41 +153,78 @@ export default function setupSocketEvents(io) {
     // ==========================================
     // QUICK DRAW EVENTS
     // ==========================================
-    socket.on("join_match", (data) => {
-      const { matchId, playerId, player1Id, player2Id } = data;
-      const roomName = `match_${matchId}`;
-      socket.join(roomName);
-
-      if (!activeGames[matchId]) {
-        activeGames[matchId] = {
-          wordToDraw: getRandomWord(),
-          playerScores: { player1: 0, player2: 0 },
-          player1Id,
-          player2Id,
-          drawerId: player1Id,
-        };
+    socket.on("join_match", async (data) => {
+      const { matchId, playerId } = data;
+      const numericPlayerId = Number(playerId);
+      if (isNaN(numericPlayerId) || !matchId) {
+        socket.emit("error", { message: "Invalid payload" });
+        return;
       }
 
-      const game = activeGames[matchId];
+      try {
+        const match = await getMatchById(matchId);
+        if (!match) {
+          socket.emit("error", { message: "Match not found" });
+          return;
+        }
 
-      // Everyone gets a status ping
-      socket.emit("game_status", { message: "Welcome to the match!" });
+        if (numericPlayerId !== match.player_1_id && numericPlayerId !== match.player_2_id) {
+          socket.emit("error", { message: "Access denied. Only match players can join this match." });
+          return;
+        }
 
-      // Only the drawer sees the secret word
-      if (
-        playerId &&
-        game?.drawerId &&
-        Number(playerId) === Number(game.drawerId)
-      ) {
-        socket.emit("game_status", {
-          message: "You are the drawer. Start drawing!",
-          wordToDraw: game.wordToDraw,
-        });
+        const roomName = `match_${matchId}`;
+        socket.join(roomName);
+
+        if (!activeGames[matchId]) {
+          activeGames[matchId] = {
+            wordToDraw: getRandomWord(),
+            playerScores: { player1: 0, player2: 0 },
+            player1Id: match.player_1_id,
+            player2Id: match.player_2_id,
+            drawerId: match.player_1_id,
+            strokes: [] // Store drawing strokes history
+          };
+        }
+
+        const game = activeGames[matchId];
+
+        // Everyone gets a status ping
+        socket.emit("game_status", { message: "Welcome to the match!" });
+
+        // Only the drawer sees the secret word
+        if (numericPlayerId === Number(game.drawerId)) {
+          socket.emit("game_status", {
+            message: "You are the drawer. Start drawing!",
+            wordToDraw: game.wordToDraw,
+          });
+        }
+
+        // Send previous drawing strokes history to reconnecting player
+        if (game.strokes && game.strokes.length > 0) {
+          socket.emit("draw_history", { strokes: game.strokes });
+        }
+      } catch (err) {
+        console.error("Error in join_match:", err);
+        socket.emit("error", { message: "Server error" });
       }
     });
 
     socket.on("draw_stroke", (data) => {
-      const roomName = `match_${data.matchId}`;
+      const { matchId, playerId, x, y, type } = data;
+      const game = activeGames[matchId];
+      if (!game) return;
+
+      const numericPlayerId = Number(playerId);
+      // Validate that only the active drawer can draw
+      if (numericPlayerId !== Number(game.drawerId)) {
+        return;
+      }
+
+      // Record the stroke
+      game.strokes.push({ x, y, type });
+
+      const roomName = `match_${matchId}`;
       socket.to(roomName).emit("receive_stroke", data);
     });
 
@@ -154,11 +233,23 @@ export default function setupSocketEvents(io) {
       const game = activeGames[matchId];
       if (!game) return;
 
+      const numericPlayerId = Number(playerId);
+      if (numericPlayerId !== game.player1Id && numericPlayerId !== game.player2Id) {
+        socket.emit("error", { message: "Access denied. You are not a player in this match." });
+        return;
+      }
+
+      // Block the drawer from submitting guesses
+      if (numericPlayerId === Number(game.drawerId)) {
+        socket.emit("error", { message: "Access denied. The drawer cannot guess the word." });
+        return;
+      }
+
       if (guess.toUpperCase() === game.wordToDraw.toUpperCase()) {
         try {
-          const result = await completeMatch(matchId, playerId);
+          const result = await completeMatch(matchId, numericPlayerId);
           io.to(`match_${matchId}`).emit("match_over", {
-            winnerId: playerId,
+            winnerId: numericPlayerId,
             word: game.wordToDraw,
             bracketUpdate: result.message,
           });

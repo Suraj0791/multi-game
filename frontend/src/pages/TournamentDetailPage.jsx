@@ -17,10 +17,13 @@
 //   joinMutation, leaveMutation, startMutation
 
 import { useParams } from 'react-router-dom'
+import { useQueryClient } from '@tanstack/react-query'
 import { useTournament } from '@/hooks/useTournaments'
 import { usePlayers, useJoinTournament, useLeaveTournament, useStartTournament, useBracket } from '@/hooks/usePlayers'
 import useAuthStore from '@/stores/authStore'
 import useSocket from '@/hooks/useSocket'
+import { createPaymentOrder } from '@/api/tournamentApi'
+import { toast } from 'sonner'
 
 import TournamentHeader from '@/components/tournaments/TournamentHeader'
 import PlayerList from '@/components/tournaments/PlayerList'
@@ -51,6 +54,8 @@ export default function TournamentDetailPage() {
   const leaveMutation = useLeaveTournament(id)
   const startMutation = useStartTournament(id)
 
+  const queryClient = useQueryClient()
+
   // ============================================================
   // DERIVED STATE — computed from server state + userId
   // ============================================================
@@ -58,11 +63,92 @@ export default function TournamentDetailPage() {
   // If tournament or players change, these update automatically.
 
   const isHost = tournament?.hostId === Number(userId)
-  const hasJoined = (players || []).some(p => p.playerId === Number(userId))
-  const canJoin = !hasJoined && tournament?.status === 'REGISTRATION'
-  const canLeave = hasJoined && tournament?.status === 'REGISTRATION'
-  const canStart = isHost && tournament?.status === 'REGISTRATION' && (players || []).length >= 2
+  const playersList = players || []
+  const hasJoined = playersList.some(p => p.playerId === Number(userId))
+  const canJoin = !hasJoined && tournament?.status === 'REGISTRATION' && playersList.length < (tournament?.maxPlayers || 8)
+  const canLeave = hasJoined && tournament?.status === 'REGISTRATION' && !isHost
   const showBracket = tournament?.status !== 'REGISTRATION'
+
+  // Payment derived states
+  const currentPlayer = playersList.find(p => p.playerId === Number(userId))
+  const needsPayment = hasJoined && tournament?.entryFee > 0 && currentPlayer?.paymentStatus === 'PENDING'
+
+  // Host start validations
+  const isPowerOfTwo = playersList.length >= 2 && (playersList.length & (playersList.length - 1)) === 0
+  const hasUnpaidPlayers = tournament?.entryFee > 0 && playersList.some(p => p.paymentStatus !== 'COMPLETED')
+  const canStart = isHost && tournament?.status === 'REGISTRATION'
+
+  let startDisabledReason = ''
+  if (playersList.length < 2) {
+    startDisabledReason = 'Need at least 2 players to start'
+  } else if (!isPowerOfTwo) {
+    startDisabledReason = 'Player count must be a power of 2 (2, 4, 8, 16)'
+  } else if (hasUnpaidPlayers) {
+    startDisabledReason = 'All players must complete their payment before starting'
+  }
+
+  // ============================================================
+  // PAYMENT HANDLERS
+  // ============================================================
+  const loadRazorpayScript = () => {
+    return new Promise((resolve) => {
+      if (window.Razorpay) {
+        resolve(true);
+        return;
+      }
+      const script = document.createElement('script');
+      script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+      script.async = true;
+      script.onload = () => resolve(true);
+      script.onerror = () => resolve(false);
+      document.body.appendChild(script);
+    });
+  };
+
+  const handlePayment = async () => {
+    try {
+      const isLoaded = await loadRazorpayScript();
+      if (!isLoaded) {
+        toast.error('Failed to load Razorpay payment gateway. Please check your connection.');
+        return;
+      }
+
+      // Call backend to create payment order
+      const orderData = await createPaymentOrder(id);
+
+      const options = {
+        key: orderData.keyId,
+        amount: orderData.amount,
+        currency: orderData.currency,
+        name: 'TourneyHub',
+        description: `Entry Fee for ${tournament.name}`,
+        order_id: orderData.orderId,
+        handler: async function (response) {
+          toast.success('Payment captured successfully!');
+          // Invalidate queries so that players' status updates to COMPLETED in the UI
+          queryClient.invalidateQueries({ queryKey: ['players', id] });
+        },
+        prefill: {
+          name: '',
+          email: '',
+        },
+        theme: {
+          color: '#F59E0B',
+        },
+        modal: {
+          ondismiss: function () {
+            toast.error('Payment checkout cancelled');
+          }
+        }
+      };
+
+      const paymentObject = new window.Razorpay(options);
+      paymentObject.open();
+    } catch (err) {
+      console.error('Payment flow failed:', err);
+      toast.error(err.response?.data?.error || err.message || 'Payment failed to initiate');
+    }
+  };
 
   // ============================================================
   // LOADING STATE
@@ -97,9 +183,12 @@ export default function TournamentDetailPage() {
         canJoin={canJoin}
         canLeave={canLeave}
         canStart={canStart}
+        needsPayment={needsPayment}
+        startDisabledReason={startDisabledReason}
         onJoin={() => joinMutation.mutate()}
         onLeave={() => leaveMutation.mutate()}
         onStart={() => startMutation.mutate()}
+        onPay={handlePayment}
         isJoining={joinMutation.isPending}
         isLeaving={leaveMutation.isPending}
         isStarting={startMutation.isPending}

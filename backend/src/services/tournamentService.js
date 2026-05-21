@@ -4,7 +4,7 @@ import {
   getTournamentById as fetchTournamentById,
   updateTournamentStatus
 } from '../models/Tournament.js';
-import { getPlayersByTournament, addPlayer } from '../models/TournamentPlayer.js';
+import { getPlayersByTournament, addPlayer, updatePlayerPaymentStatus } from '../models/TournamentPlayer.js';
 import { createMatch, getMatchesByTournament } from '../models/Match.js';
 
 export async function createTournament(name, game_type, max_players, entry_fee, host_id) {
@@ -17,6 +17,8 @@ export async function createTournament(name, game_type, max_players, entry_fee, 
 
   // Auto-join the host as player 1 in the tournament
   await addPlayer(tournament.id, host_id);
+  // Auto-mark the host as COMPLETED upon auto-joining (exempt from entry fee)
+  await updatePlayerPaymentStatus(tournament.id, host_id, 'COMPLETED');
 
   // Return only what the controller needs
   // tournament.max_players NOT tournament.maxPlayers 
@@ -96,6 +98,19 @@ export async function startTournament(id, host_id) {
   // Need at least 2 players to start a tournament
   if (players.length < 2) {
     throw new Error('Need at least 2 players to start the tournament');
+  }
+
+  // Check if player count is a power of 2
+  if ((players.length & (players.length - 1)) !== 0) {
+    throw new Error('Tournament player count must be a power of 2 to generate brackets cleanly (e.g., 2, 4, 8, 16)');
+  }
+
+  // If entryFee > 0, check if all players have completed their payments
+  if (tournament.entryFee > 0) {
+    const unpaidPlayers = players.filter(p => p.payment_status !== 'COMPLETED');
+    if (unpaidPlayers.length > 0) {
+      throw new Error('Cannot start tournament: Some players have not completed their entry fee payments');
+    }
   }
 
   // --- BRACKET MATH ---
