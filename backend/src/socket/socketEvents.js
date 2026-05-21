@@ -182,12 +182,25 @@ export default function setupSocketEvents(io) {
       const { tournamentId, userId } = data;
       const roomName = `chat_tournament_${tournamentId}`;
 
+      const numericUserId = Number(userId);
+      if (!userId || isNaN(numericUserId) || numericUserId <= 0) {
+        socket.emit("chat:error", { message: "Invalid user session. Please log in again." });
+        return;
+      }
+
       try {
         // Join the chat room (same socket, different room from match rooms)
         socket.join(roomName);
 
+        // Keep track of which rooms this socket has joined to prevent duplicate system messages
+        if (!socketJoinedRooms[socket.id]) {
+          socketJoinedRooms[socket.id] = {};
+        }
+        const alreadyJoined = socketJoinedRooms[socket.id][roomName];
+        socketJoinedRooms[socket.id][roomName] = true;
+
         // Look up username ONCE and cache it — don't query DB on every message
-        const user = await findById(userId);
+        const user = await findById(numericUserId);
         chatUsernames[socket.id] = user?.username || "Anonymous";
 
         console.log(
@@ -196,21 +209,40 @@ export default function setupSocketEvents(io) {
           } joined chat for tournament ${tournamentId}`
         );
 
-        // Notify everyone in the room
-        io.to(roomName).emit("chat:user_joined", {
-          username: chatUsernames[socket.id],
-          message: `${chatUsernames[socket.id]} joined the chat`,
-        });
+        // Notify everyone in the room only if this socket hasn't already joined this room
+        if (!alreadyJoined) {
+          io.to(roomName).emit("chat:user_joined", {
+            username: chatUsernames[socket.id],
+            message: `${chatUsernames[socket.id]} joined the chat`,
+          });
+        }
       } catch (error) {
         console.error("❌ Error in chat:join socket handler:", error);
         socket.emit("chat:error", { message: "Failed to join chat room." });
       }
     });
 
+    // User leaves a tournament chat room (when navigating away)
+    socket.on("chat:leave", (data) => {
+      const { tournamentId } = data;
+      const roomName = `chat_tournament_${tournamentId}`;
+      socket.leave(roomName);
+      if (socketJoinedRooms[socket.id]) {
+        delete socketJoinedRooms[socket.id][roomName];
+      }
+      console.log(`💬 Socket ${socket.id} left room ${roomName}`);
+    });
+
     // User sends a chat message
     socket.on("chat:send", async (data) => {
       const { tournamentId, userId, text } = data;
       const roomName = `chat_tournament_${tournamentId}`;
+
+      const numericUserId = Number(userId);
+      if (!userId || isNaN(numericUserId) || numericUserId <= 0) {
+        socket.emit("chat:error", { message: "Invalid user session. Please log in again." });
+        return;
+      }
 
       // RATE LIMIT — max 1 message per second (prevents spam)
       const now = Date.now();
@@ -224,7 +256,7 @@ export default function setupSocketEvents(io) {
 
       try {
         // Save to DB (service validates: not empty, max 500 chars)
-        const saved = await sendMessage(tournamentId, userId, text);
+        const saved = await sendMessage(tournamentId, numericUserId, text);
 
         // Broadcast to EVERYONE in the chat room (including sender)
         io.to(roomName).emit("chat:message", {
@@ -261,6 +293,7 @@ export default function setupSocketEvents(io) {
       // Clean up chat state for this socket
       delete chatUsernames[socket.id];
       delete lastChatTime[socket.id];
+      delete socketJoinedRooms[socket.id];
       console.log(`❌ User disconnected: ${socket.id}`);
     });
   });
