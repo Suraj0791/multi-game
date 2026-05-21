@@ -30,8 +30,10 @@ export default function PlayerList({ players, maxPlayers }) {
                     ELO {player.eloRating}
                   </span>
                 </div>
-                {player.paymentStatus === 'COMPLETED' && (
-                  <Badge variant="outline" className="text-success text-xs">Paid</Badge>
+                {player.paymentStatus === 'COMPLETED' ? (
+                  <Badge variant="outline" className="border-emerald-500/30 bg-emerald-500/10 text-emerald-400 text-xs">Paid</Badge>
+                ) : (
+                  <Badge variant="outline" className="border-amber-500/30 bg-amber-500/10 text-amber-400 text-xs">Pending</Badge>
                 )}
               </div>
             ))}
