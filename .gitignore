@@ -1,3 +1,22 @@
 **/node_modules/
 .env*
 AI_CONTEXT/
+
+
+# Playwright
+playwright-report/
+test-results/
+blob-report/
+
+# Screenshots / snapshots
+*.png
+*.webm
+*.zip
+
+# Playwright traces/videos
+trace/
+videos/
+screenshots/
+
+# Optional
+playwright/.cache/

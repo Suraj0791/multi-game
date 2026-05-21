@@ -16,89 +16,102 @@
 //   ON:   chat:user_joined → { username, message }
 //   ON:   chat:error  → { message }
 
-import { useState, useEffect, useRef } from 'react'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { MessageSquare, Send } from 'lucide-react'
+import { useState, useEffect, useRef } from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { MessageSquare, Send } from "lucide-react";
 
 export default function ChatPanel({ socket, tournamentId, userId }) {
-  const [messages, setMessages] = useState([])
-  const [inputText, setInputText] = useState('')
-  const [error, setError] = useState(null)
+  const [messages, setMessages] = useState([]);
+  const [inputText, setInputText] = useState("");
+  const [error, setError] = useState(null);
 
   // Ref to auto-scroll to bottom when new messages arrive
-  const messagesEndRef = useRef(null)
+  const messagesEndRef = useRef(null);
 
   // Auto-scroll to newest message
   const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
 
   // ============================================================
   // SOCKET: Join chat room + listen for messages
   // ============================================================
   useEffect(() => {
-    if (!socket || !tournamentId || !userId) return
-
-    // Join the tournament chat room
-    socket.emit('chat:join', { tournamentId, userId })
+    if (!socket || !tournamentId || !userId) return;
 
     // Listen for new messages
     const onMessage = (data) => {
-      setMessages(prev => [...prev, data])
-      // prev = current messages array
-      // [...prev, data] = new array with the new message appended
-      // This is React's immutable update pattern — never mutate state directly
-    }
+      console.log("💬 [ChatPanel] Message received:", data);
+      setMessages((prev) => [...prev, data]);
+    };
 
     // Listen for user join notifications
     const onUserJoined = (data) => {
-      setMessages(prev => [...prev, {
-        id: Date.now(),
-        username: 'System',
-        message: data.message,
-        isSystem: true,
-      }])
-    }
+      console.log("💬 [ChatPanel] User joined notification:", data);
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: Date.now(),
+          username: "System",
+          message: data.message,
+          isSystem: true,
+        },
+      ]);
+    };
 
     // Listen for errors (rate limiting, empty message, etc.)
     const onError = (data) => {
-      setError(data.message)
-      setTimeout(() => setError(null), 3000)
+      console.error("❌ [ChatPanel] Chat error received:", data.message);
+      setError(data.message);
+      setTimeout(() => setError(null), 3000);
+    };
+
+    socket.on("chat:message", onMessage);
+    socket.on("chat:user_joined", onUserJoined);
+    socket.on("chat:error", onError);
+
+    const joinRoom = () => {
+      socket.emit("chat:join", { tournamentId, userId });
+    };
+
+    // Join immediately if already connected
+    if (socket.connected) {
+      joinRoom();
     }
 
-    socket.on('chat:message', onMessage)
-    socket.on('chat:user_joined', onUserJoined)
-    socket.on('chat:error', onError)
+    // Join on every connection/reconnection
+    socket.on("connect", joinRoom);
 
     return () => {
-      socket.off('chat:message', onMessage)
-      socket.off('chat:user_joined', onUserJoined)
-      socket.off('chat:error', onError)
-    }
-  }, [socket, tournamentId, userId])
+      socket.off("connect", joinRoom);
+      socket.off("chat:message", onMessage);
+      socket.off("chat:user_joined", onUserJoined);
+      socket.off("chat:error", onError);
+    };
+  }, [socket, tournamentId, userId]);
 
   // Scroll when messages change
   useEffect(() => {
-    scrollToBottom()
-  }, [messages])
+    scrollToBottom();
+  }, [messages]);
 
   // ============================================================
   // SEND MESSAGE
   // ============================================================
   const handleSend = (e) => {
-    e.preventDefault()
-    if (!inputText.trim() || !socket) return
+    e.preventDefault();
+    if (!inputText.trim() || !socket) return;
 
-    socket.emit('chat:send', {
+    socket.emit("chat:send", {
       tournamentId,
       userId,
       text: inputText.trim(),
-    })
+    });
 
-    setInputText('')
-  }
+    setInputText("");
+  };
 
   return (
     <Card className="flex flex-col h-[400px]">
@@ -121,11 +134,21 @@ export default function ChatPanel({ socket, tournamentId, userId }) {
           {messages.map((msg) => (
             <div
               key={msg.id}
-              className={`text-sm ${msg.isSystem ? 'text-center text-xs text-muted-foreground italic' : ''}`}
+              className={`text-sm ${
+                msg.isSystem
+                  ? "text-center text-xs text-muted-foreground italic"
+                  : ""
+              }`}
             >
               {!msg.isSystem && (
                 <>
-                  <span className={`font-medium ${Number(msg.userId) === Number(userId) ? 'text-primary' : 'text-foreground'}`}>
+                  <span
+                    className={`font-medium ${
+                      Number(msg.userId) === Number(userId)
+                        ? "text-primary"
+                        : "text-foreground"
+                    }`}
+                  >
                     {msg.username}
                   </span>
                   <span className="text-muted-foreground">: </span>
@@ -139,9 +162,7 @@ export default function ChatPanel({ socket, tournamentId, userId }) {
         </div>
 
         {/* Error message */}
-        {error && (
-          <p className="text-xs text-danger mb-2">{error}</p>
-        )}
+        {error && <p className="text-xs text-danger mb-2">{error}</p>}
 
         {/* Input + send button */}
         <form onSubmit={handleSend} className="flex gap-2">
@@ -157,5 +178,5 @@ export default function ChatPanel({ socket, tournamentId, userId }) {
         </form>
       </CardContent>
     </Card>
-  )
+  );
 }

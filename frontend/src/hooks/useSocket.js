@@ -22,8 +22,15 @@ export default function useSocket() {
     })
   )
 
-  // Cleanup only — disconnect when component unmounts
+  // Ensure socket is connected (handles React StrictMode's unmount→remount cycle).
+  // StrictMode calls cleanup (socket.disconnect()) on first mount, but
+  // Socket.IO treats manual disconnects as permanent (no auto-reconnect).
+  // Calling socket.connect() here re-establishes the connection after remount.
   useEffect(() => {
+    if (!socket.connected) {
+      socket.connect()
+    }
+
     return () => {
       socket.disconnect()
     }

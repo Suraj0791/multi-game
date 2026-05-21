@@ -22,3 +22,22 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+
+# Playwright
+playwright-report/
+test-results/
+blob-report/
+
+# Screenshots / snapshots
+*.png
+*.webm
+*.zip
+
+# Playwright traces/videos
+trace/
+videos/
+screenshots/
+
+# Optional
+playwright/.cache/

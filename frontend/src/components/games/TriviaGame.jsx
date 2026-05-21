@@ -43,8 +43,17 @@ export default function TriviaGame({ socket, matchId, player1Id, player2Id, curr
   useEffect(() => {
     if (!socket) return
 
-    // JOIN the match room
-    socket.emit('trivia:join', { matchId, player1Id, player2Id })
+    const joinMatch = () => {
+      socket.emit('trivia:join', { matchId, player1Id, player2Id })
+    }
+
+    // Join immediately if already connected
+    if (socket.connected) {
+      joinMatch()
+    }
+
+    // Re-join on connection/reconnection
+    socket.on('connect', joinMatch)
 
     // LISTENER: Game is starting
     const onStarted = () => {
@@ -96,6 +105,7 @@ export default function TriviaGame({ socket, matchId, player1Id, player2Id, curr
     // CLEANUP — remove all listeners when component unmounts
     // Without this: memory leak + ghost listeners
     return () => {
+      socket.off('connect', joinMatch)
       socket.off('trivia:started', onStarted)
       socket.off('trivia:new_question', onNewQuestion)
       socket.off('trivia:answer_feedback', onFeedback)

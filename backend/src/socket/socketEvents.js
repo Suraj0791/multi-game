@@ -1,16 +1,16 @@
-import { getRandomWord } from '../games/gameConstants.js';
-import { completeMatch } from '../services/matchService.js'; 
-import { TriviaGame } from '../games/TriviaGame.js';
-import { sendMessage } from '../services/chatService.js';
-import { findById } from '../models/User.js';
-import { setSocketIO } from '../services/notificationService.js';
+import { getRandomWord } from "../games/gameConstants.js";
+import { completeMatch } from "../services/matchService.js";
+import { TriviaGame } from "../games/TriviaGame.js";
+import { sendMessage } from "../services/chatService.js";
+import { findById } from "../models/User.js";
+import { setSocketIO } from "../services/notificationService.js";
 
 const activeGames = {};
 const activeTriviaGames = {};
 
 // Chat state — stored in memory, per socket connection
-const chatUsernames = {};   // { socketId: username } — cached so we don't query DB every message
-const lastChatTime = {};    // { socketId: timestamp } — for rate limiting (1 msg/sec)
+const chatUsernames = {}; // { socketId: username } — cached so we don't query DB every message
+const lastChatTime = {}; // { socketId: timestamp } — for rate limiting (1 msg/sec)
 
 async function sendNextTriviaQuestion(io, matchId, player1Id, player2Id) {
   const game = activeTriviaGames[matchId];
@@ -22,12 +22,12 @@ async function sendNextTriviaQuestion(io, matchId, player1Id, player2Id) {
     const winnerId = game.getWinner(player1Id, player2Id);
     const result = await completeMatch(matchId, winnerId);
 
-    io.to(roomName).emit("trivia:match_over", { 
-      winnerId, 
+    io.to(roomName).emit("trivia:match_over", {
+      winnerId,
       scores: game.scores,
-      bracketUpdate: result.message
+      bracketUpdate: result.message,
     });
-    
+
     delete activeTriviaGames[matchId];
     return;
   }
@@ -38,13 +38,12 @@ async function sendNextTriviaQuestion(io, matchId, player1Id, player2Id) {
   game.timeoutId = setTimeout(() => {
     const correctAns = game.questions[game.currentQuestionIndex].correctAnswer;
     io.to(roomName).emit("trivia:round_over", { correctAnswer: correctAns });
-    
+
     game.nextRound();
 
     setTimeout(() => {
       sendNextTriviaQuestion(io, matchId, player1Id, player2Id);
     }, 3000);
-
   }, 10000);
 }
 
@@ -59,13 +58,19 @@ export default function setupSocketEvents(io) {
     socket.on("trivia:join", (data) => {
       const { matchId, player1Id, player2Id } = data;
       const roomName = `match_${matchId}`;
-      socket.join(roomName); 
+      socket.join(roomName);
 
       if (!activeTriviaGames[matchId]) {
-        activeTriviaGames[matchId] = new TriviaGame(matchId, player1Id, player2Id);
-        
-        io.to(roomName).emit("trivia:started", { message: "Game starting in 3 seconds!" });
-        
+        activeTriviaGames[matchId] = new TriviaGame(
+          matchId,
+          player1Id,
+          player2Id
+        );
+
+        io.to(roomName).emit("trivia:started", {
+          message: "Game starting in 3 seconds!",
+        });
+
         setTimeout(() => {
           sendNextTriviaQuestion(io, matchId, player1Id, player2Id);
         }, 3000);
@@ -79,24 +84,63 @@ export default function setupSocketEvents(io) {
 
       const result = game.submitAnswer(playerId, answer, timeTakenMs);
       socket.emit("trivia:answer_feedback", result);
-      io.to(`match_${matchId}`).emit("trivia:score_update", { scores: game.scores });
+      io.to(`match_${matchId}`).emit("trivia:score_update", {
+        scores: game.scores,
+      });
+
+      // If both players answered, end the round early and go to the next question.
+      const allAnswered = Object.values(game.hasAnsweredCurrent).every(Boolean);
+      if (allAnswered) {
+        if (game.timeoutId) clearTimeout(game.timeoutId);
+
+        const correctAns =
+          game.questions[game.currentQuestionIndex].correctAnswer;
+        io.to(`match_${matchId}`).emit("trivia:round_over", {
+          correctAnswer: correctAns,
+        });
+
+        game.nextRound();
+
+        setTimeout(() => {
+          sendNextTriviaQuestion(io, matchId, game.player1Id, game.player2Id);
+        }, 1000);
+      }
     });
 
     // ==========================================
     // QUICK DRAW EVENTS
     // ==========================================
     socket.on("join_match", (data) => {
-      const matchId = data.matchId;
+      const { matchId, playerId, player1Id, player2Id } = data;
       const roomName = `match_${matchId}`;
-      socket.join(roomName); 
+      socket.join(roomName);
 
       if (!activeGames[matchId]) {
         activeGames[matchId] = {
           wordToDraw: getRandomWord(),
-          playerScores: { player1: 0, player2: 0 }
+          playerScores: { player1: 0, player2: 0 },
+          player1Id,
+          player2Id,
+          drawerId: player1Id,
         };
       }
-      io.to(roomName).emit("game_status", { message: "Welcome to the match!" });
+
+      const game = activeGames[matchId];
+
+      // Everyone gets a status ping
+      socket.emit("game_status", { message: "Welcome to the match!" });
+
+      // Only the drawer sees the secret word
+      if (
+        playerId &&
+        game?.drawerId &&
+        Number(playerId) === Number(game.drawerId)
+      ) {
+        socket.emit("game_status", {
+          message: "You are the drawer. Start drawing!",
+          wordToDraw: game.wordToDraw,
+        });
+      }
     });
 
     socket.on("draw_stroke", (data) => {
@@ -112,10 +156,10 @@ export default function setupSocketEvents(io) {
       if (guess.toUpperCase() === game.wordToDraw.toUpperCase()) {
         try {
           const result = await completeMatch(matchId, playerId);
-          io.to(`match_${matchId}`).emit("match_over", { 
-            winnerId: playerId, 
+          io.to(`match_${matchId}`).emit("match_over", {
+            winnerId: playerId,
             word: game.wordToDraw,
-            bracketUpdate: result.message 
+            bracketUpdate: result.message,
           });
           delete activeGames[matchId];
         } catch (error) {
@@ -137,20 +181,29 @@ export default function setupSocketEvents(io) {
       const { tournamentId, userId } = data;
       const roomName = `chat_tournament_${tournamentId}`;
 
-      // Join the chat room (same socket, different room from match rooms)
-      socket.join(roomName);
+      try {
+        // Join the chat room (same socket, different room from match rooms)
+        socket.join(roomName);
 
-      // Look up username ONCE and cache it — don't query DB on every message
-      const user = await findById(userId);
-      chatUsernames[socket.id] = user?.username || 'Anonymous';
+        // Look up username ONCE and cache it — don't query DB on every message
+        const user = await findById(userId);
+        chatUsernames[socket.id] = user?.username || "Anonymous";
 
-      console.log(`💬 ${chatUsernames[socket.id]} joined chat for tournament ${tournamentId}`);
+        console.log(
+          `💬 ${
+            chatUsernames[socket.id]
+          } joined chat for tournament ${tournamentId}`
+        );
 
-      // Notify everyone in the room
-      io.to(roomName).emit("chat:user_joined", {
-        username: chatUsernames[socket.id],
-        message: `${chatUsernames[socket.id]} joined the chat`
-      });
+        // Notify everyone in the room
+        io.to(roomName).emit("chat:user_joined", {
+          username: chatUsernames[socket.id],
+          message: `${chatUsernames[socket.id]} joined the chat`,
+        });
+      } catch (error) {
+        console.error("❌ Error in chat:join socket handler:", error);
+        socket.emit("chat:error", { message: "Failed to join chat room." });
+      }
     });
 
     // User sends a chat message
@@ -161,7 +214,9 @@ export default function setupSocketEvents(io) {
       // RATE LIMIT — max 1 message per second (prevents spam)
       const now = Date.now();
       if (lastChatTime[socket.id] && now - lastChatTime[socket.id] < 1000) {
-        socket.emit("chat:error", { message: "Slow down! 1 message per second." });
+        socket.emit("chat:error", {
+          message: "Slow down! 1 message per second.",
+        });
         return;
       }
       lastChatTime[socket.id] = now;
@@ -174,11 +229,12 @@ export default function setupSocketEvents(io) {
         io.to(roomName).emit("chat:message", {
           id: saved.id,
           userId: saved.user_id,
-          username: chatUsernames[socket.id] || 'Anonymous',
+          username: chatUsernames[socket.id] || "Anonymous",
           message: saved.message,
-          createdAt: saved.created_at
+          createdAt: saved.created_at,
         });
       } catch (error) {
+        console.error("❌ Error in chat:send socket handler:", error);
         // Only the sender sees the error (empty message, too long, etc.)
         socket.emit("chat:error", { message: error.message });
       }

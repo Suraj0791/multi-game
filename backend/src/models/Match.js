@@ -1,7 +1,13 @@
-import { query } from '../config/database.js';
+import { query } from "../config/database.js";
 
 // Create a new match in the database
-export async function createMatch(tournamentId, player1Id, player2Id, roundNumber, matchNumber) {
+export async function createMatch(
+  tournamentId,
+  player1Id,
+  player2Id,
+  roundNumber,
+  matchNumber
+) {
   const result = await query(
     `INSERT INTO matches (tournament_id, player_1_id, player_2_id, round_number, match_number)
      VALUES ($1, $2, $3, $4, $5)
@@ -16,10 +22,12 @@ export async function getMatchesByTournament(tournamentId) {
   const result = await query(
     `SELECT m.*, 
             u1.username AS player_1_name,
-            u2.username AS player_2_name
+            u2.username AS player_2_name,
+            t.game_type
      FROM matches m
      LEFT JOIN users u1 ON m.player_1_id = u1.id
      LEFT JOIN users u2 ON m.player_2_id = u2.id
+     LEFT JOIN tournaments t ON m.tournament_id = t.id
      WHERE m.tournament_id = $1
      ORDER BY m.round_number ASC, m.match_number ASC`,
     [tournamentId]
@@ -29,10 +37,7 @@ export async function getMatchesByTournament(tournamentId) {
 
 // Get ONE match by its ID
 export async function getMatchById(matchId) {
-  const result = await query(
-    `SELECT * FROM matches WHERE id = $1`,
-    [matchId]
-  );
+  const result = await query(`SELECT * FROM matches WHERE id = $1`, [matchId]);
   return result.rows[0];
 }
 
@@ -50,11 +55,26 @@ export async function updateMatchWinner(matchId, winnerId) {
 
 // Find a specific match by its tournament, round, and match number
 // (Used to find the neighbor match!)
-export async function getMatchByRoundAndNumber(tournamentId, roundNumber, matchNumber) {
+export async function getMatchByRoundAndNumber(
+  tournamentId,
+  roundNumber,
+  matchNumber
+) {
   const result = await query(
     `SELECT * FROM matches 
      WHERE tournament_id = $1 AND round_number = $2 AND match_number = $3`,
     [tournamentId, roundNumber, matchNumber]
   );
   return result.rows[0];
+}
+
+// Count how many matches are still not completed in a tournament
+export async function countIncompleteMatches(tournamentId) {
+  const result = await query(
+    `SELECT COUNT(*)::int AS count
+     FROM matches
+     WHERE tournament_id = $1 AND status <> 'COMPLETED'`,
+    [tournamentId]
+  );
+  return result.rows[0]?.count ?? 0;
 }

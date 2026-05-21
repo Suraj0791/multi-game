@@ -150,6 +150,7 @@ export async function getTournamentMatches(id) {
     player1Name: m.player_1_name, // from JOIN
     player2Id: m.player_2_id,
     player2Name: m.player_2_name, // from JOIN
+    gameType: m.game_type,        // from tournament JOIN
     status: m.status,
     winnerId: m.winner_id
   }));

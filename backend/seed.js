@@ -16,11 +16,104 @@ async function seed() {
     // Start a transaction to ensure all seed operations succeed or fail together
     await client.query('BEGIN');
 
-    // 1. Clean up old data
-    console.log('🧹 Clearing old data (truncating tables)...');
+    // 0. Automatically create tables if they do not exist
+    console.log('🔧 Creating any missing database tables...');
     await client.query(`
-      TRUNCATE TABLE chat_messages, notifications, matches, tournament_players, tournaments, users CASCADE
+      CREATE TABLE IF NOT EXISTS notifications (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        type VARCHAR(50) NOT NULL,
+        title VARCHAR(100) NOT NULL,
+        message TEXT NOT NULL,
+        is_read BOOLEAN DEFAULT FALSE,
+        related_id INTEGER,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
     `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS chat_messages (
+        id SERIAL PRIMARY KEY,
+        tournament_id INTEGER NOT NULL REFERENCES tournaments(id) ON DELETE CASCADE,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        message TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS rating_history (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        match_id INTEGER NOT NULL REFERENCES matches(id) ON DELETE CASCADE,
+        rating_change INTEGER NOT NULL,
+        new_rating INTEGER NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS payments (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        tournament_id INTEGER NOT NULL REFERENCES tournaments(id) ON DELETE CASCADE,
+        amount INTEGER NOT NULL,
+        razorpay_order_id VARCHAR(255) NOT NULL UNIQUE,
+        razorpay_payment_id VARCHAR(255),
+        status VARCHAR(20) DEFAULT 'PENDING' CHECK (status IN ('PENDING', 'SUCCESS', 'FAILED')),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS reports (
+        id SERIAL PRIMARY KEY,
+        reporter_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        reported_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        reason TEXT NOT NULL,
+        status VARCHAR(20) DEFAULT 'PENDING' CHECK (status IN ('PENDING', 'RESOLVED', 'DISMISSED')),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS blocked_users (
+        id SERIAL PRIMARY KEY,
+        blocker_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        blocked_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE (blocker_id, blocked_user_id)
+      )
+    `);
+
+    // 1. Clean up old data
+    // Query the database to find which tables actually exist in the public schema
+    const tablesRes = await client.query(`
+      SELECT table_name 
+      FROM information_schema.tables 
+      WHERE table_schema = 'public' AND table_type = 'BASE TABLE'
+    `);
+    const existingTables = tablesRes.rows.map(r => r.table_name);
+
+    const tablesToTruncate = [
+      'chat_messages',
+      'notifications',
+      'reports',
+      'blocked_users',
+      'rating_history',
+      'payments',
+      'matches',
+      'tournament_players',
+      'tournaments',
+      'users'
+    ].filter(t => existingTables.includes(t));
+
+    if (tablesToTruncate.length > 0) {
+      console.log(`🧹 Clearing old data (truncating: ${tablesToTruncate.join(', ')})...`);
+      await client.query(`TRUNCATE TABLE ${tablesToTruncate.join(', ')} CASCADE`);
+    } else {
+      console.log('🧹 No tables exist yet to clear.');
+    }
 
     // 2. Hash password for test users
     console.log('🔑 Hashing password for test players...');
