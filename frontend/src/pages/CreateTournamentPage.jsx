@@ -109,6 +109,7 @@ export default function CreateTournamentPage() {
                 {...register('max_players')}
                 className="w-full h-9 rounded-md border border-border bg-background px-3 text-sm text-foreground"
               >
+                <option value="2">2 Players</option>
                 <option value="4">4 Players</option>
                 <option value="8">8 Players</option>
                 <option value="16">16 Players</option>

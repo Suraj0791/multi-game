@@ -25,6 +25,10 @@ export async function create(req, res) {
       ...result,
     });
   } catch (error) {
+    console.error('Error creating tournament:', error.message);
+    if (error.message.includes('violates') || error.message.includes('syntax')) {
+      return res.status(400).json({ error: 'Database error occurred. Please ensure your session is valid.' });
+    }
     res.status(400).json({ error: error.message });
   }
 }

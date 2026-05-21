@@ -1,10 +1,11 @@
 import { Link, useLocation } from 'react-router-dom'
-import { Trophy, Swords, BarChart3, LogOut } from 'lucide-react'
+import { Trophy, Swords, BarChart3, LogOut, User } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import useAuthStore from '@/stores/authStore'
 
 export default function Navbar() {
   const logout = useAuthStore((state) => state.logout)
+  const userId = useAuthStore((state) => state.userId)
   const location = useLocation()  // tells us the current URL
 
   // Helper: is this link the current page? (for highlighting)
@@ -37,11 +38,21 @@ export default function Navbar() {
           </div>
         </div>
 
-        {/* RIGHT side — Logout */}
-        <Button variant="ghost" size="sm" onClick={logout} className="gap-1.5 text-muted-foreground hover:text-foreground">
-          <LogOut className="h-4 w-4" />
-          Logout
-        </Button>
+        {/* RIGHT side — Profile & Logout */}
+        <div className="flex items-center gap-2">
+          {userId && (
+            <Link to={`/profile/${userId}`}>
+              <Button variant="ghost" size="sm" className="gap-1.5 text-muted-foreground hover:text-foreground">
+                <User className="h-4 w-4" />
+                Profile
+              </Button>
+            </Link>
+          )}
+          <Button variant="ghost" size="sm" onClick={logout} className="gap-1.5 text-muted-foreground hover:text-foreground">
+            <LogOut className="h-4 w-4" />
+            Logout
+          </Button>
+        </div>
       </div>
     </nav>
   )
