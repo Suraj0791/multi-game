@@ -130,4 +130,113 @@ describe('Tournament & Chat API', () => {
       expect(history.length).toBe(2);
     });
   });
+
+  // ==========================================
+  // Tournament Start Validations
+  // ==========================================
+  describe('Tournament Start Constraints', () => {
+    let unpaidTournamentId;
+    let oddTournamentId;
+
+    it('should fail to start a tournament if players count is less than 2', async () => {
+      // Create a brand new tournament with entry fee = 0
+      const res = await request(app)
+        .post('/tournaments')
+        .set('Authorization', `Bearer ${hostToken}`)
+        .send({
+          name: `Empty Cup ${timestamp}`,
+          game_type: 'TRIVIA',
+          max_players: 8,
+          entry_fee: 0
+        })
+        .expect(201);
+      
+      const emptyTournamentId = res.body.tournamentId;
+
+      // Try to start immediately (host auto-joins, so player count = 1)
+      const startRes = await request(app)
+        .put(`/tournaments/${emptyTournamentId}/start`)
+        .set('Authorization', `Bearer ${hostToken}`)
+        .expect(400);
+
+      expect(startRes.body.error).toContain('Need at least 2 players to start');
+    });
+
+    it('should fail to start a tournament with odd/non-power-of-2 player counts', async () => {
+      // Create tournament
+      const res = await request(app)
+        .post('/tournaments')
+        .set('Authorization', `Bearer ${hostToken}`)
+        .send({
+          name: `PowerOfTwo Test Cup ${timestamp}`,
+          game_type: 'TRIVIA',
+          max_players: 8,
+          entry_fee: 0
+        })
+        .expect(201);
+
+      oddTournamentId = res.body.tournamentId;
+
+      // Join player 1 (total players = 2: host + player1)
+      await request(app)
+        .post(`/tournaments/${oddTournamentId}/join`)
+        .set('Authorization', `Bearer ${playerToken}`)
+        .expect(201);
+
+      // Register another player so we have 3 players total (non power of 2)
+      const testPlayer3 = {
+        username: `player3_${timestamp}`,
+        email: `player3_${timestamp}@test.com`,
+        password: 'password123'
+      };
+      const regRes = await request(app)
+        .post('/auth/register')
+        .send(testPlayer3)
+        .expect(201);
+      const player3Token = regRes.body.token;
+
+      await request(app)
+        .post(`/tournaments/${oddTournamentId}/join`)
+        .set('Authorization', `Bearer ${player3Token}`)
+        .expect(201);
+
+      // Try starting with 3 players
+      const startRes = await request(app)
+        .put(`/tournaments/${oddTournamentId}/start`)
+        .set('Authorization', `Bearer ${hostToken}`)
+        .expect(400);
+
+      expect(startRes.body.error).toContain('player count must be a power of 2');
+    });
+
+    it('should fail to start a paid tournament with unpaid players', async () => {
+      // Create a paid tournament
+      const res = await request(app)
+        .post('/tournaments')
+        .set('Authorization', `Bearer ${hostToken}`)
+        .send({
+          name: `Paid Test Cup ${timestamp}`,
+          game_type: 'TRIVIA',
+          max_players: 8,
+          entry_fee: 100
+        })
+        .expect(201);
+
+      unpaidTournamentId = res.body.tournamentId;
+
+      // Join player (total players = 2: host + player). Player joins as PENDING payment
+      await request(app)
+        .post(`/tournaments/${unpaidTournamentId}/join`)
+        .set('Authorization', `Bearer ${playerToken}`)
+        .expect(201);
+
+      // Try starting the tournament (host is COMPLETED, but player is PENDING)
+      const startRes = await request(app)
+        .put(`/tournaments/${unpaidTournamentId}/start`)
+        .set('Authorization', `Bearer ${hostToken}`)
+        .expect(400);
+
+      expect(startRes.body.error).toContain('Some players have not completed their entry fee payments');
+    });
+  });
 });
