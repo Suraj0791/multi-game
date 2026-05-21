@@ -42,6 +42,7 @@ export default function QuickDrawGame({
   player1Id,
   player2Id,
   currentUserId,
+  isSpectator,
 }) {
   // ============================================================
   // STATE
@@ -111,6 +112,31 @@ export default function QuickDrawGame({
       }
     };
 
+    // Redraw history on reconnection
+    const onDrawHistory = (data) => {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      const ctx = canvas.getContext("2d");
+      
+      // Clear canvas first
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      if (data.strokes) {
+        data.strokes.forEach((stroke) => {
+          if (stroke.type === "start") {
+            ctx.beginPath();
+            ctx.moveTo(stroke.x, stroke.y);
+          } else {
+            ctx.lineTo(stroke.x, stroke.y);
+            ctx.strokeStyle = "#F59E0B";
+            ctx.lineWidth = 3;
+            ctx.lineCap = "round";
+            ctx.stroke();
+          }
+        });
+      }
+    };
+
     const onWrongGuess = (data) => {
       setGuessMessage(data.message);
       setTimeout(() => setGuessMessage(null), 2000);
@@ -123,6 +149,7 @@ export default function QuickDrawGame({
 
     socket.on("game_status", onGameStatus);
     socket.on("receive_stroke", onReceiveStroke);
+    socket.on("draw_history", onDrawHistory);
     socket.on("wrong_guess", onWrongGuess);
     socket.on("match_over", onMatchOver);
 
@@ -130,6 +157,7 @@ export default function QuickDrawGame({
       socket.off("connect", joinMatch);
       socket.off("game_status", onGameStatus);
       socket.off("receive_stroke", onReceiveStroke);
+      socket.off("draw_history", onDrawHistory);
       socket.off("wrong_guess", onWrongGuess);
       socket.off("match_over", onMatchOver);
     };
@@ -143,7 +171,7 @@ export default function QuickDrawGame({
 
   const handleMouseDown = useCallback(
     (e) => {
-      if (!isDrawer) return;
+      if (!isDrawer || isSpectator) return;
       setIsDrawing(true);
       const canvas = canvasRef.current;
       const rect = canvas.getBoundingClientRect();
@@ -155,14 +183,14 @@ export default function QuickDrawGame({
       ctx.moveTo(x, y);
 
       // Send stroke START to opponent
-      socket.emit("draw_stroke", { matchId, x, y, type: "start" });
+      socket.emit("draw_stroke", { matchId, playerId: Number(currentUserId), x, y, type: "start" });
     },
-    [isDrawer, socket, matchId]
+    [isDrawer, isSpectator, socket, matchId, currentUserId]
   );
 
   const handleMouseMove = useCallback(
     (e) => {
-      if (!isDrawer || !isDrawing) return;
+      if (!isDrawer || !isDrawing || isSpectator) return;
       const canvas = canvasRef.current;
       const rect = canvas.getBoundingClientRect();
       const x = e.clientX - rect.left;
@@ -176,9 +204,9 @@ export default function QuickDrawGame({
       ctx.stroke();
 
       // Send stroke DRAW to opponent
-      socket.emit("draw_stroke", { matchId, x, y, type: "draw" });
+      socket.emit("draw_stroke", { matchId, playerId: Number(currentUserId), x, y, type: "draw" });
     },
-    [isDrawer, isDrawing, socket, matchId]
+    [isDrawer, isDrawing, isSpectator, socket, matchId, currentUserId]
   );
 
   const handleMouseUp = useCallback(() => {
@@ -207,70 +235,77 @@ export default function QuickDrawGame({
   // RENDER
   // ============================================================
 
-  if (gameStatus === "waiting") {
-    return (
-      <Card className="max-w-lg mx-auto">
-        <CardContent className="p-8 text-center">
-          <Pencil className="h-12 w-12 text-primary mx-auto mb-4" />
-          <h2 className="text-xl font-bold mb-2">Waiting for opponent...</h2>
-          <p className="text-muted-foreground">
-            Quick Draw match starting soon
-          </p>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  if (gameStatus === "finished" && finalResult) {
-    const isWinner = finalResult.winnerId === Number(currentUserId);
-    return (
-      <Card className="max-w-lg mx-auto">
-        <CardContent className="p-8 text-center">
-          <Trophy
-            className={`h-12 w-12 mx-auto mb-4 ${
-              isWinner ? "text-primary" : "text-muted-foreground"
-            }`}
-          />
-          <h2 className="text-2xl font-bold mb-2">
-            {isWinner ? "You Won!" : "Game Over"}
-          </h2>
-          <p className="text-muted-foreground">
-            The word was:{" "}
-            <span className="font-bold text-foreground">
-              {finalResult.word}
-            </span>
-          </p>
-        </CardContent>
-      </Card>
-    );
-  }
-
+  // Render overlay for waiting / finished status, and render the base canvas layout.
+  // ALWAYS render the base canvas layout so canvasRef is mounted when draw history events arrive.
   return (
-    <div className="max-w-2xl mx-auto space-y-4">
+    <div className="max-w-2xl mx-auto space-y-4 relative">
+      {/* Waiting screen overlay */}
+      {gameStatus === "waiting" && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-neutral-950/80 rounded-xl backdrop-blur-sm p-4">
+          <Card className="max-w-lg w-full border-neutral-800 bg-neutral-900 shadow-2xl">
+            <CardContent className="p-8 text-center space-y-4">
+              {isSpectator && (
+                <div className="bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs font-bold px-3 py-1 rounded-full w-max mx-auto uppercase tracking-wider animate-pulse">
+                  Spectator Mode
+                </div>
+              )}
+              <Pencil className="h-12 w-12 text-amber-500 mx-auto mb-2 animate-bounce" />
+              <h2 className="text-xl font-bold text-neutral-100">
+                {isSpectator ? 'Waiting for match to begin...' : 'Waiting for opponent...'}
+              </h2>
+              <p className="text-neutral-400 text-sm">Quick Draw match starting soon</p>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Match finished overlay */}
+      {gameStatus === "finished" && finalResult && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-neutral-950/90 rounded-xl backdrop-blur-sm p-4">
+          <Card className="max-w-lg w-full border-neutral-800 bg-neutral-900 shadow-2xl">
+            <CardContent className="p-8 text-center space-y-4">
+              <Trophy
+                className={`h-12 w-12 mx-auto mb-2 ${
+                  finalResult.winnerId === Number(currentUserId) && !isSpectator ? "text-amber-500 animate-pulse" : "text-neutral-600"
+                }`}
+              />
+              <h2 className="text-2xl font-black text-neutral-100 tracking-tight">
+                {isSpectator ? "Match Finished" : (finalResult.winnerId === Number(currentUserId) ? "Victory!" : "Defeat")}
+              </h2>
+              <p className="text-neutral-400 text-sm bg-neutral-950/60 p-3 rounded-lg border border-neutral-800/80">
+                The secret word was: <span className="font-extrabold text-amber-400 uppercase tracking-wide">{finalResult.word}</span>
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
       {/* Role indicator */}
-      <Card>
-        <CardContent className="p-3 flex items-center justify-between">
+      <Card className="border-neutral-800 bg-neutral-900/60">
+        <CardContent className="p-3.5 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            {isDrawer ? (
-              <Pencil className="h-4 w-4 text-primary" />
+            {isSpectator ? (
+              <Eye className="h-4 w-4 text-amber-500 animate-pulse" />
+            ) : isDrawer ? (
+              <Pencil className="h-4 w-4 text-amber-450" />
             ) : (
-              <Eye className="h-4 w-4 text-primary" />
+              <Eye className="h-4 w-4 text-amber-450" />
             )}
-            <span className="text-sm font-medium">
-              {isDrawer ? "You are DRAWING" : "You are GUESSING"}
+            <span className="text-sm font-semibold text-neutral-200">
+              {isSpectator ? "You are SPECTATING" : (isDrawer ? "You are DRAWING" : "You are GUESSING")}
             </span>
           </div>
           {/* Drawer sees the word they need to draw */}
           {isDrawer && wordToDraw && (
-            <span className="text-sm font-bold text-primary">
-              Draw: {wordToDraw}
+            <span className="text-sm font-bold text-amber-400 bg-amber-500/10 border border-amber-500/20 px-3 py-1 rounded-md">
+              Secret Word: <span className="uppercase">{wordToDraw}</span>
             </span>
           )}
         </CardContent>
       </Card>
 
       {/* Canvas */}
-      <Card>
+      <Card className="border-neutral-800 overflow-hidden bg-neutral-950">
         <CardContent className="p-2">
           <canvas
             ref={canvasRef}
@@ -280,29 +315,29 @@ export default function QuickDrawGame({
             onMouseMove={handleMouseMove}
             onMouseUp={handleMouseUp}
             onMouseLeave={handleMouseUp}
-            className={`w-full border border-border rounded bg-white ${
-              isDrawer ? "cursor-crosshair" : "cursor-default"
+            className={`w-full border border-neutral-850 rounded bg-neutral-950 shadow-inner ${
+              isDrawer && !isSpectator ? "cursor-crosshair" : "cursor-not-allowed"
             }`}
           />
         </CardContent>
       </Card>
 
-      {/* Guess input (only for guesser) */}
-      {!isDrawer && (
+      {/* Guess input (only for guesser, hidden for spectators) */}
+      {!isDrawer && !isSpectator && (
         <form onSubmit={handleGuess} className="flex gap-2">
           <Input
             value={guess}
             onChange={(e) => setGuess(e.target.value)}
-            placeholder="Type your guess..."
-            className="flex-1"
+            placeholder="Type your guess here..."
+            className="flex-1 border-neutral-800 bg-neutral-900/60 focus-visible:ring-amber-500 text-neutral-100"
           />
-          <Button type="submit">Guess</Button>
+          <Button type="submit" className="bg-amber-500 hover:bg-amber-600 text-white font-semibold">Guess</Button>
         </form>
       )}
 
       {/* Guess feedback */}
       {guessMessage && (
-        <p className="text-center text-sm text-danger font-medium">
+        <p className="text-center text-sm text-red-400 font-bold bg-red-500/10 border border-red-500/20 rounded p-2 animate-shake">
           {guessMessage}
         </p>
       )}
