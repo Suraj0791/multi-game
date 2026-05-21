@@ -28,13 +28,12 @@
 //   ON:   game_status    → { message, wordToDraw? }
 //   ON:   receive_stroke → { x, y, type }
 //   ON:   wrong_guess    → { message: "Try again!" }
-//   ON:   match_over     → { winnerId, word }
-
-import { useState, useEffect, useRef, useCallback } from "react";
+//   ON:   match_oveimport { useState, useEffect, useRef, useCallback } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Pencil, Eye, Trophy } from "lucide-react";
+import { toast } from "sonner";
 
 export default function QuickDrawGame({
   socket,
@@ -68,23 +67,6 @@ export default function QuickDrawGame({
   // ============================================================
   useEffect(() => {
     if (!socket) return;
-
-    const joinMatch = () => {
-      socket.emit("join_match", {
-        matchId,
-        playerId: Number(currentUserId),
-        player1Id,
-        player2Id,
-      });
-    };
-
-    // Join immediately if already connected
-    if (socket.connected) {
-      joinMatch();
-    }
-
-    // Re-join on connection/reconnection
-    socket.on("connect", joinMatch);
 
     const onGameStatus = (data) => {
       setGameStatus("playing");
@@ -147,11 +129,34 @@ export default function QuickDrawGame({
       setGameStatus("finished");
     };
 
+    const onError = (data) => {
+      toast.error(data.message || "An error occurred");
+    };
+
+    // Register all socket listeners BEFORE emitting join
     socket.on("game_status", onGameStatus);
     socket.on("receive_stroke", onReceiveStroke);
     socket.on("draw_history", onDrawHistory);
     socket.on("wrong_guess", onWrongGuess);
     socket.on("match_over", onMatchOver);
+    socket.on("error", onError);
+
+    const joinMatch = () => {
+      socket.emit("join_match", {
+        matchId,
+        playerId: Number(currentUserId),
+        player1Id,
+        player2Id,
+      });
+    };
+
+    // Join immediately if already connected
+    if (socket.connected) {
+      joinMatch();
+    }
+
+    // Re-join on connection/reconnection
+    socket.on("connect", joinMatch);
 
     return () => {
       socket.off("connect", joinMatch);
@@ -160,6 +165,7 @@ export default function QuickDrawGame({
       socket.off("draw_history", onDrawHistory);
       socket.off("wrong_guess", onWrongGuess);
       socket.off("match_over", onMatchOver);
+      socket.off("error", onError);
     };
   }, [socket, matchId, currentUserId, player1Id, player2Id]);
 
@@ -175,8 +181,10 @@ export default function QuickDrawGame({
       setIsDrawing(true);
       const canvas = canvasRef.current;
       const rect = canvas.getBoundingClientRect();
-      const x = e.clientX - rect.left;
-      const y = e.clientY - rect.top;
+      const scaleX = canvas.width / rect.width;
+      const scaleY = canvas.height / rect.height;
+      const x = (e.clientX - rect.left) * scaleX;
+      const y = (e.clientY - rect.top) * scaleY;
 
       const ctx = canvas.getContext("2d");
       ctx.beginPath();
@@ -193,8 +201,57 @@ export default function QuickDrawGame({
       if (!isDrawer || !isDrawing || isSpectator) return;
       const canvas = canvasRef.current;
       const rect = canvas.getBoundingClientRect();
-      const x = e.clientX - rect.left;
-      const y = e.clientY - rect.top;
+      const scaleX = canvas.width / rect.width;
+      const scaleY = canvas.height / rect.height;
+      const x = (e.clientX - rect.left) * scaleX;
+      const y = (e.clientY - rect.top) * scaleY;
+
+      const ctx = canvas.getContext("2d");
+      ctx.lineTo(x, y);
+      ctx.strokeStyle = "#F59E0B";
+      ctx.lineWidth = 3;
+      ctx.lineCap = "round";
+      ctx.stroke();
+
+      // Send stroke DRAW to opponent
+      socket.emit("draw_stroke", { matchId, playerId: Number(currentUserId), x, y, type: "draw" });
+    },
+    [isDrawer, isDrawing, isSpectator, socket, matchId, currentUserId]
+  );
+
+  const handleTouchStart = useCallback(
+    (e) => {
+      if (!isDrawer || isSpectator) return;
+      setIsDrawing(true);
+      const canvas = canvasRef.current;
+      const rect = canvas.getBoundingClientRect();
+      const scaleX = canvas.width / rect.width;
+      const scaleY = canvas.height / rect.height;
+      const touch = e.touches[0];
+      const x = (touch.clientX - rect.left) * scaleX;
+      const y = (touch.clientY - rect.top) * scaleY;
+
+      const ctx = canvas.getContext("2d");
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+
+      // Send stroke START to opponent
+      socket.emit("draw_stroke", { matchId, playerId: Number(currentUserId), x, y, type: "start" });
+    },
+    [isDrawer, isSpectator, socket, matchId, currentUserId]
+  );
+
+  const handleTouchMove = useCallback(
+    (e) => {
+      if (!isDrawer || !isDrawing || isSpectator) return;
+      if (e.cancelable) e.preventDefault(); // Prevent scrolling while drawing on touch devices
+      const canvas = canvasRef.current;
+      const rect = canvas.getBoundingClientRect();
+      const scaleX = canvas.width / rect.width;
+      const scaleY = canvas.height / rect.height;
+      const touch = e.touches[0];
+      const x = (touch.clientX - rect.left) * scaleX;
+      const y = (touch.clientY - rect.top) * scaleY;
 
       const ctx = canvas.getContext("2d");
       ctx.lineTo(x, y);
@@ -219,7 +276,10 @@ export default function QuickDrawGame({
   const handleGuess = useCallback(
     (e) => {
       e.preventDefault();
-      if (!guess.trim()) return;
+      if (!guess.trim()) {
+        toast.error("Please enter a guess first");
+        return;
+      }
 
       socket.emit("submit_guess", {
         matchId,
@@ -269,7 +329,7 @@ export default function QuickDrawGame({
                   }`}
               />
               <h2 className="text-2xl font-black text-neutral-100 tracking-tight">
-                {isSpectator ? "Match Finished" : (finalResult.winnerId === Number(currentUserId) ? "Victory!" : "Defeat")}
+                {isSpectator ? "Match Finished" : (finalResult.winnerId === Number(currentUserId) ? "You Won!" : "Game Over")}
               </h2>
               <p className="text-neutral-400 text-sm bg-neutral-950/60 p-3 rounded-lg border border-neutral-800/80">
                 The secret word was: <span className="font-extrabold text-amber-400 uppercase tracking-wide">{finalResult.word}</span>
@@ -286,9 +346,9 @@ export default function QuickDrawGame({
             {isSpectator ? (
               <Eye className="h-4 w-4 text-amber-500 animate-pulse" />
             ) : isDrawer ? (
-              <Pencil className="h-4 w-4 text-amber-450" />
+              <Pencil className="h-4 w-4 text-amber-400" />
             ) : (
-              <Eye className="h-4 w-4 text-amber-450" />
+              <Eye className="h-4 w-4 text-amber-400" />
             )}
             <span className="text-sm font-semibold text-neutral-200">
               {isSpectator ? "You are SPECTATING" : (isDrawer ? "You are DRAWING" : "You are GUESSING")}
@@ -297,7 +357,7 @@ export default function QuickDrawGame({
           {/* Drawer sees the word they need to draw */}
           {isDrawer && wordToDraw && (
             <span className="text-sm font-bold text-amber-400 bg-amber-500/10 border border-amber-500/20 px-3 py-1 rounded-md">
-              Secret Word: <span className="uppercase">{wordToDraw}</span>
+              Draw: <span className="uppercase">{wordToDraw}</span>
             </span>
           )}
         </CardContent>
@@ -314,6 +374,9 @@ export default function QuickDrawGame({
             onMouseMove={handleMouseMove}
             onMouseUp={handleMouseUp}
             onMouseLeave={handleMouseUp}
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleMouseUp}
             className={`w-full border border-neutral-850 rounded bg-neutral-950 shadow-inner ${isDrawer && !isSpectator ? "cursor-crosshair" : "cursor-not-allowed"
               }`}
           />
@@ -326,7 +389,7 @@ export default function QuickDrawGame({
           <Input
             value={guess}
             onChange={(e) => setGuess(e.target.value)}
-            placeholder="Type your guess here..."
+            placeholder="Type your guess..."
             className="flex-1 border-neutral-800 bg-neutral-900/60 focus-visible:ring-amber-500 text-neutral-100"
           />
           <Button type="submit" className="bg-amber-500 hover:bg-amber-600 text-white font-semibold">Guess</Button>

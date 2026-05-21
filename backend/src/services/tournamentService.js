@@ -1,6 +1,6 @@
-import { 
-  createTournament as insertTournament, 
-  getTournaments as fetchTournaments, 
+import {
+  createTournament as insertTournament,
+  getTournaments as fetchTournaments,
   getTournamentById as fetchTournamentById,
   updateTournamentStatus
 } from '../models/Tournament.js';
@@ -77,7 +77,7 @@ export async function getTournamentById(id) {
 
 export async function startTournament(id, host_id) {
   const tournament = await getTournamentById(id);
-  
+
   if (!tournament) {
     throw new Error('Tournament does not exist');
   }
@@ -94,7 +94,12 @@ export async function startTournament(id, host_id) {
 
   // Get all players (we will need them for the bracket later)
   const players = await getPlayersByTournament(id);
-  
+
+  // Verify all slots are filled
+  if (players.length !== tournament.maxPlayers) {
+    throw new Error(`Tournament needs ${tournament.maxPlayers} players, but only ${players.length} joined`);
+  }
+
   // Need at least 2 players to start a tournament
   if (players.length < 2) {
     throw new Error('Need at least 2 players to start the tournament');
@@ -174,10 +179,10 @@ export async function getTournamentMatches(id) {
 // Group matches by round for the bracket UI
 export async function getTournamentBracket(id) {
   const matches = await getTournamentMatches(id);
-  
+
   // Create an object where keys are "round1", "round2", etc.
   const bracket = {};
-  
+
   matches.forEach(m => {
     const roundKey = `round${m.roundNumber}`;
     if (!bracket[roundKey]) {

@@ -74,15 +74,18 @@ export default function TournamentDetailPage() {
   const needsPayment = hasJoined && tournament?.entryFee > 0 && currentPlayer?.paymentStatus === 'PENDING'
 
   // Host start validations
-  const isPowerOfTwo = playersList.length >= 2 && (playersList.length & (playersList.length - 1)) === 0
+  const allSlotsFilledAndPowerOfTwo = 
+    playersList.length === tournament?.maxPlayers && 
+    (tournament?.maxPlayers & (tournament?.maxPlayers - 1)) === 0
   const hasUnpaidPlayers = tournament?.entryFee > 0 && playersList.some(p => p.paymentStatus !== 'COMPLETED')
   const canStart = isHost && tournament?.status === 'REGISTRATION'
 
   let startDisabledReason = ''
-  if (playersList.length < 2) {
-    startDisabledReason = 'Need at least 2 players to start'
-  } else if (!isPowerOfTwo) {
-    startDisabledReason = 'Player count must be a power of 2 (2, 4, 8, 16)'
+  if (playersList.length < (tournament?.maxPlayers || 0)) {
+    const needed = (tournament?.maxPlayers || 0) - playersList.length
+    startDisabledReason = `Need ${needed} more`
+  } else if (!allSlotsFilledAndPowerOfTwo) {
+    startDisabledReason = 'Tournament size must be a power of 2 (2, 4, 8, 16)'
   } else if (hasUnpaidPlayers) {
     startDisabledReason = 'All players must complete their payment before starting'
   }

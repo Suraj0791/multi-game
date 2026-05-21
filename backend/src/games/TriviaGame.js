@@ -17,6 +17,7 @@ export class TriviaGame {
       [player1Id]: false,
       [player2Id]: false,
     };
+    this.roundEnded = false;
   }
 
   getCurrentQuestion() {

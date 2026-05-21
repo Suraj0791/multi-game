@@ -16,7 +16,10 @@ export async function completeMatch(matchId, winnerId) {
   if (!match) throw new Error("Match not found");
 
   if (match.status === "COMPLETED") {
-    throw new Error("Match is already completed");
+    return {
+      message: "Match is already completed",
+      match,
+    };
   }
 
   const updatedMatch = await updateMatchWinner(matchId, winnerId);

@@ -74,6 +74,11 @@ export async function leaveTournament(tournamentId, playerId) {
     throw new Error('Cannot leave a tournament that already started');
   }
 
+  // Prevent host from leaving
+  if (Number(playerId) === Number(tournament.host_id)) {
+    throw new Error('Host cannot leave the tournament');
+  }
+
   // Check player is actually in this tournament
   const existing = await findPlayer(tournamentId, playerId);
   if (!existing) {

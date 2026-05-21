@@ -32,19 +32,21 @@ app.use(cors({
 }));
 
 // Rate Limiting — prevents spam and brute force attacks
-// 100 requests per 15 minutes per IP address
+// 100 requests per 15 minutes per IP address (skipped in development/testing)
 const generalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,  // 15 minutes
-  max: 100,                   // max 100 requests per window
+  max: process.env.NODE_ENV === 'production' ? 100 : 10000,
   message: { success: false, error: 'Too many requests. Try again in 15 minutes.' },
   standardHeaders: true,      // sends rate limit info in response headers
+  skip: () => process.env.NODE_ENV !== 'production',
 });
 
 // Stricter limit for auth routes — prevents brute force password guessing
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,  // 15 minutes
-  max: 20,                    // only 20 login/register attempts per 15 min
+  max: process.env.NODE_ENV === 'production' ? 20 : 1000,
   message: { success: false, error: 'Too many auth attempts. Try again later.' },
+  skip: () => process.env.NODE_ENV !== 'production',
 });
 
 app.use(generalLimiter);  // apply to ALL routes

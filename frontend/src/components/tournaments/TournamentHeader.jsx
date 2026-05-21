@@ -18,7 +18,7 @@ const STATUS_COLORS = {
 
 export default function TournamentHeader({ tournament }) {
   return (
-    <div className="relative overflow-hidden rounded-xl border border-neutral-800 bg-gradient-to-br from-neutral-900 via-neutral-950 to-amber-955/10 p-6 md:p-8 shadow-[0_4px_20px_rgba(0,0,0,0.4)]">
+    <div className="relative overflow-hidden rounded-xl border border-neutral-800 bg-gradient-to-br from-neutral-900 via-neutral-950 to-amber-950/10 p-6 md:p-8 shadow-[0_4px_20px_rgba(0,0,0,0.4)]">
       {/* Absolute Decorative Glow */}
       <div className="absolute right-0 top-0 -z-10 h-32 w-32 rounded-full bg-amber-500/5 blur-3xl" />
       

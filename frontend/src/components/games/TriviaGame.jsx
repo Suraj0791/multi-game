@@ -23,6 +23,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Trophy, Clock, CheckCircle, XCircle } from 'lucide-react'
+import { toast } from 'sonner'
 
 export default function TriviaGame({ socket, matchId, player1Id, player2Id, currentUserId, isSpectator }) {
   // ============================================================
@@ -36,24 +37,29 @@ export default function TriviaGame({ socket, matchId, player1Id, player2Id, curr
   const [scores, setScores] = useState({})               // { playerId: score }
   const [finalResult, setFinalResult] = useState(null)   // end-of-game data
   const [questionStart, setQuestionStart] = useState(0)  // timestamp for timeTakenMs
+  const [countdown, setCountdown] = useState(3)
+
+  // Countdown timer for starting state
+  useEffect(() => {
+    if (gameStatus !== 'starting') return
+    setCountdown(3)
+    const interval = setInterval(() => {
+      setCountdown(prev => {
+        if (prev <= 1) {
+          clearInterval(interval)
+          return 0
+        }
+        return prev - 1
+      })
+    }, 1000)
+    return () => clearInterval(interval)
+  }, [gameStatus])
 
   // ============================================================
   // SOCKET EVENT LISTENERS — set up on mount, clean up on unmount
   // ============================================================
   useEffect(() => {
     if (!socket) return
-
-    const joinMatch = () => {
-      socket.emit('trivia:join', { matchId, playerId: Number(currentUserId) })
-    }
-
-    // Join immediately if already connected
-    if (socket.connected) {
-      joinMatch()
-    }
-
-    // Re-join on connection/reconnection
-    socket.on('connect', joinMatch)
 
     // LISTENER: Game is starting
     const onStarted = () => {
@@ -62,6 +68,9 @@ export default function TriviaGame({ socket, matchId, player1Id, player2Id, curr
 
     // LISTENER: New question arrived
     const onNewQuestion = (data) => {
+      // Request fresh scores snapshot immediately
+      socket.emit('trivia:request_scores', { matchId })
+
       setQuestion(data.question)
       setTimeLeft(data.timerSeconds)
       setSelectedAnswer(null)
@@ -83,7 +92,10 @@ export default function TriviaGame({ socket, matchId, player1Id, player2Id, curr
 
     // LISTENER: Round is over (timeout — no one answered in time)
     const onRoundOver = (data) => {
-      setFeedback({ correct: false, correctAnswer: data.correctAnswer })
+      setFeedback(prev => {
+        if (prev !== null) return prev;
+        return { correct: false, correctAnswer: data.correctAnswer };
+      });
       setGameStatus('result')
     }
 
@@ -94,16 +106,32 @@ export default function TriviaGame({ socket, matchId, player1Id, player2Id, curr
       setGameStatus('finished')
     }
 
-    // REGISTER all listeners
+    const onTriviaError = (data) => {
+      toast.error(data.message || 'An error occurred');
+    }
+
+    // REGISTER all listeners BEFORE emitting join
     socket.on('trivia:started', onStarted)
     socket.on('trivia:new_question', onNewQuestion)
     socket.on('trivia:answer_feedback', onFeedback)
     socket.on('trivia:score_update', onScoreUpdate)
     socket.on('trivia:round_over', onRoundOver)
     socket.on('trivia:match_over', onMatchOver)
+    socket.on('trivia:error', onTriviaError)
+
+    const joinMatch = () => {
+      socket.emit('trivia:join', { matchId, playerId: Number(currentUserId) })
+    }
+
+    // Join immediately if already connected
+    if (socket.connected) {
+      joinMatch()
+    }
+
+    // Re-join on connection/reconnection
+    socket.on('connect', joinMatch)
 
     // CLEANUP — remove all listeners when component unmounts
-    // Without this: memory leak + ghost listeners
     return () => {
       socket.off('connect', joinMatch)
       socket.off('trivia:started', onStarted)
@@ -112,6 +140,7 @@ export default function TriviaGame({ socket, matchId, player1Id, player2Id, curr
       socket.off('trivia:score_update', onScoreUpdate)
       socket.off('trivia:round_over', onRoundOver)
       socket.off('trivia:match_over', onMatchOver)
+      socket.off('trivia:error', onTriviaError)
     }
   }, [socket, matchId, currentUserId])
 
@@ -172,8 +201,11 @@ export default function TriviaGame({ socket, matchId, player1Id, player2Id, curr
           )}
           <Trophy className="h-12 w-12 text-amber-500 mx-auto mb-2 animate-bounce" />
           <h2 className="text-xl font-bold text-neutral-100">
-            {isSpectator ? 'Waiting for match to begin...' : (gameStatus === 'starting' ? 'Game starting...' : 'Waiting for opponent...')}
+            {isSpectator ? 'Waiting for match to begin...' : (gameStatus === 'starting' ? 'Game Starting!' : 'Waiting for opponent...')}
           </h2>
+          {gameStatus === 'starting' && !isSpectator && countdown > 0 && (
+            <p className="text-4xl font-black text-amber-500 animate-pulse">{countdown}...</p>
+          )}
           <p className="text-neutral-400 text-sm">Get ready for the Trivia Showdown!</p>
         </CardContent>
       </Card>
@@ -188,7 +220,7 @@ export default function TriviaGame({ socket, matchId, player1Id, player2Id, curr
         <CardContent className="p-8 text-center space-y-4">
           <Trophy className={`h-12 w-12 mx-auto mb-2 ${isWinner && !isSpectator ? 'text-amber-500 animate-pulse' : 'text-neutral-600'}`} />
           <h2 className="text-2xl font-black tracking-tight text-neutral-100">
-            {isSpectator ? 'Match Finished' : (isWinner ? 'Victory!' : 'Defeat')}
+            {isSpectator ? 'Match Finished' : (isWinner ? 'You Won!' : 'Game Over')}
           </h2>
           <div className="text-neutral-400 space-y-2 bg-neutral-900/60 p-4 rounded-lg border border-neutral-800/80">
             {Object.entries(scores).map(([playerId, score]) => (
@@ -218,7 +250,7 @@ export default function TriviaGame({ socket, matchId, player1Id, player2Id, curr
           <span>{isSpectator ? 'Spectating' : `Your Score: ${scores[currentUserId] || 0}`}</span>
           <div className="flex items-center gap-1.5 bg-neutral-900 px-2.5 py-1 rounded-full border border-neutral-800">
             <Clock className={`h-3.5 w-3.5 ${timeLeft <= 3 ? 'text-red-500 animate-pulse' : 'text-amber-400'}`} />
-            <span className={timeLeft <= 3 ? 'text-red-550 font-extrabold' : 'font-mono'}>{timeLeft}s</span>
+            <span className={timeLeft <= 3 ? 'text-red-500 font-extrabold' : 'font-mono'}>{timeLeft}s</span>
           </div>
         </div>
 
@@ -266,7 +298,7 @@ export default function TriviaGame({ socket, matchId, player1Id, player2Id, curr
 
             {/* Feedback message */}
             {gameStatus === 'result' && feedback && (
-              <div className={`text-center text-sm font-semibold rounded-lg p-3 ${feedback.correct ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-red-500/10 text-red-455 border border-red-500/20'}`}>
+              <div className={`text-center text-sm font-semibold rounded-lg p-3 ${feedback.correct ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-red-500/10 text-red-400 border border-red-500/20'}`}>
                 {feedback.correct ? `Correct! +${feedback.points} pts` : `Round Over! Correct Answer: ${feedback.correctAnswer}`}
               </div>
             )}
