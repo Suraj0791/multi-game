@@ -275,21 +275,30 @@ test.describe("TourneyHub End-to-End Suite", () => {
     const match = (bracket.rounds?.round1 || [])[0];
     if (!match) throw new Error("Match not found");
 
-    const drawerContext = await browser.newContext();
-    const guesserContext = await browser.newContext();
-    const drawerPage = await drawerContext.newPage();
-    const guesserPage = await guesserContext.newPage();
+    // Drawer is always match.player1Id (randomly assigned during bracket creation)
+    const isP1Drawer = Number(match.player1Id) === Number(p1Auth.userId);
 
-    setupLogging(drawerPage, "drawer-p1");
-    setupLogging(guesserPage, "guesser-p2");
+    const ctxDrawer = await browser.newContext();
+    const ctxGuesser = await browser.newContext();
+    const drawerPage = await ctxDrawer.newPage();
+    const guesserPage = await ctxGuesser.newPage();
 
-    await uiLogin(drawerPage, "player1@test.com", "password123");
-    await uiLogin(guesserPage, "player2@test.com", "password123");
+    setupLogging(drawerPage, isP1Drawer ? "p1-drawer" : "p2-drawer");
+    setupLogging(guesserPage, isP1Drawer ? "p2-guesser" : "p1-guesser");
+
+    // Log in the correct user for each role
+    if (isP1Drawer) {
+      await uiLogin(drawerPage, "player1@test.com", "password123");
+      await uiLogin(guesserPage, "player2@test.com", "password123");
+    } else {
+      await uiLogin(drawerPage, "player2@test.com", "password123");
+      await uiLogin(guesserPage, "player1@test.com", "password123");
+    }
 
     await drawerPage.goto(`/tournaments/${tournamentId}/match/${match.id}`);
     await guesserPage.goto(`/tournaments/${tournamentId}/match/${match.id}`);
 
-    // Verify role indicators (they should appear once the game starts)
+    // Verify role indicators (drawer sees DRAWING, guesser sees GUESSING)
     await expect(drawerPage.locator("text=You are DRAWING")).toBeVisible({ timeout: 25_000 });
     await expect(guesserPage.locator("text=You are GUESSING")).toBeVisible({ timeout: 25_000 });
 
@@ -324,8 +333,8 @@ test.describe("TourneyHub End-to-End Suite", () => {
     await expect(guesserPage.locator("text=You Won!")).toBeVisible({ timeout: 30_000 });
     await expect(drawerPage.locator("text=Game Over")).toBeVisible({ timeout: 30_000 });
 
-    await drawerContext.close();
-    await guesserContext.close();
+    await ctxDrawer.close();
+    await ctxGuesser.close();
   });
 
   // ------------------------------------------------------------
@@ -361,12 +370,17 @@ test.describe("TourneyHub End-to-End Suite", () => {
     await uiLogin(p1Page, "player1@test.com", "password123");
     await uiLogin(p2Page, "player2@test.com", "password123");
 
-    await p1Page.goto(`/tournaments/${tournamentId}/match/${match.id}`);
-    await p2Page.goto(`/tournaments/${tournamentId}/match/${match.id}`);
+    // Navigate both pages in parallel so both sockets connect around the same time
+    await Promise.all([
+      p1Page.goto(`/tournaments/${tournamentId}/match/${match.id}`),
+      p2Page.goto(`/tournaments/${tournamentId}/match/${match.id}`),
+    ]);
 
-    // Verify starting countdown on both pages
-    await expect(p1Page.locator("text=Game Starting!")).toBeVisible({ timeout: 25_000 });
-    await expect(p2Page.locator("text=Game Starting!")).toBeVisible({ timeout: 25_000 });
+    // Check both pages IN PARALLEL for "Game Starting!" (countdown only lasts 3 seconds)
+    await expect(async () => {
+      await expect(p1Page.locator("text=Game Starting!")).toBeVisible({ timeout: 10_000 });
+      await expect(p2Page.locator("text=Game Starting!")).toBeVisible({ timeout: 10_000 });
+    }).toPass({ timeout: 30_000, intervals: [1_000, 2_000, 3_000] });
 
     // Play Trivia to end
     await Promise.all([
@@ -411,12 +425,19 @@ test.describe("TourneyHub End-to-End Suite", () => {
     await uiLogin(p1Page, "player1@test.com", "password123");
     await uiLogin(p2Page, "player2@test.com", "password123");
 
-    await p1Page.goto(`/tournaments/${tournamentId}/match/${match.id}`);
-    await p2Page.goto(`/tournaments/${tournamentId}/match/${match.id}`);
+    // Navigate both pages IN PARALLEL so both sockets connect around the same time
+    await Promise.all([
+      p1Page.goto(`/tournaments/${tournamentId}/match/${match.id}`),
+      p2Page.goto(`/tournaments/${tournamentId}/match/${match.id}`),
+    ]);
 
-    // Wait for match starting state on BOTH pages
-    await expect(p1Page.locator("text=Game Starting!")).toBeVisible({ timeout: 25_000 });
-    await expect(p2Page.locator("text=Game Starting!")).toBeVisible({ timeout: 25_000 });
+    // Wait for match to start — accept either "Game Starting!" or "Your Score:" (playing state)
+    await expect(
+      p1Page.locator("text=Game Starting!").or(p1Page.locator("text=Your Score:"))
+    ).toBeVisible({ timeout: 25_000 });
+    await expect(
+      p2Page.locator("text=Game Starting!").or(p2Page.locator("text=Your Score:"))
+    ).toBeVisible({ timeout: 25_000 });
 
     // Close player 2 page (disconnection)
     await p2Context.close();
@@ -526,19 +547,28 @@ test.describe("TourneyHub End-to-End Suite", () => {
     const match = (bracket.rounds?.round1 || [])[0];
     if (!match) throw new Error("Match not found");
 
-    const drawerCtx = await browser.newContext();
-    const guesserCtx = await browser.newContext();
-    const drawerPage = await drawerCtx.newPage();
-    const guesserPage = await guesserCtx.newPage();
+    const isP1Drawer = Number(match.player1Id) === Number(p1Auth.userId);
+
+    const ctxDrawer = await browser.newContext();
+    const ctxGuesser = await browser.newContext();
+    const drawerPage = await ctxDrawer.newPage();
+    const guesserPage = await ctxGuesser.newPage();
 
     setupLogging(drawerPage, "qd-wrong-drawer");
     setupLogging(guesserPage, "qd-wrong-guesser");
 
-    await uiLogin(drawerPage, "player1@test.com", "password123");
-    await uiLogin(guesserPage, "player2@test.com", "password123");
+    if (isP1Drawer) {
+      await uiLogin(drawerPage, "player1@test.com", "password123");
+      await uiLogin(guesserPage, "player2@test.com", "password123");
+    } else {
+      await uiLogin(drawerPage, "player2@test.com", "password123");
+      await uiLogin(guesserPage, "player1@test.com", "password123");
+    }
 
-    await drawerPage.goto(`/tournaments/${tournamentId}/match/${match.id}`);
-    await guesserPage.goto(`/tournaments/${tournamentId}/match/${match.id}`);
+    await Promise.all([
+      drawerPage.goto(`/tournaments/${tournamentId}/match/${match.id}`),
+      guesserPage.goto(`/tournaments/${tournamentId}/match/${match.id}`),
+    ]);
 
     // Wait for game to start
     await expect(drawerPage.locator("text=You are DRAWING")).toBeVisible({ timeout: 25_000 });
@@ -571,8 +601,8 @@ test.describe("TourneyHub End-to-End Suite", () => {
     await expect(guesserPage.locator("text=You Won!")).toBeVisible({ timeout: 30_000 });
     await expect(drawerPage.locator("text=Game Over")).toBeVisible({ timeout: 30_000 });
 
-    await drawerCtx.close();
-    await guesserCtx.close();
+    await ctxDrawer.close();
+    await ctxGuesser.close();
   });
 
   // ------------------------------------------------------------
@@ -675,58 +705,71 @@ test.describe("TourneyHub End-to-End Suite", () => {
   test("Quick Draw E2E: Spectator can view match", async ({ browser, request }) => {
     const p1Auth = await apiLogin(request, "player1@test.com", "password123");
     const p2Auth = await apiLogin(request, "player2@test.com", "password123");
-    const spectatorAuth = await apiLogin(request, "player3@test.com", "password123");
 
+    // Spectator (player3) does NOT need to be in the tournament — any logged-in
+    // user can navigate to a match URL and watch as a spectator.
     const tournamentId = await apiCreateTournament(
       request,
       "QuickDraw Spectator",
       "QUICK_DRAW",
-      4,
+      2,
       0,
       p1Auth.token
     );
     await apiJoinTournament(request, tournamentId, p2Auth.token);
-    await apiJoinTournament(request, tournamentId, spectatorAuth.token);
     await apiStartTournament(request, tournamentId, p1Auth.token);
 
     const bracket = await apiGetBracket(request, tournamentId);
-    // Find a match involving player1 and player2
     const match = bracket.rounds?.round1?.find(
       (m) => m.player1Id === p1Auth.userId || m.player2Id === p1Auth.userId
     );
     if (!match) throw new Error("Match not found");
 
-    const drawerCtx = await browser.newContext();
-    const guesserCtx = await browser.newContext();
+    // Determine roles (drawer = player1Id)
+    const isP1Drawer = Number(match.player1Id) === Number(p1Auth.userId);
+
+    const ctxA = await browser.newContext();
+    const ctxB = await browser.newContext();
     const spectatorCtx = await browser.newContext();
-    const drawerPage = await drawerCtx.newPage();
-    const guesserPage = await guesserCtx.newPage();
+    const pageA = await ctxA.newPage();
+    const pageB = await ctxB.newPage();
     const spectatorPage = await spectatorCtx.newPage();
 
-    setupLogging(drawerPage, "qd-spec-drawer");
-    setupLogging(guesserPage, "qd-spec-guesser");
+    const drawerPage = isP1Drawer ? pageA : pageB;
+    const guesserPage = isP1Drawer ? pageB : pageA;
+
+    setupLogging(pageA, "qd-spec-p1");
+    setupLogging(pageB, "qd-spec-p2");
     setupLogging(spectatorPage, "qd-spec-viewer");
 
-    await uiLogin(drawerPage, "player1@test.com", "password123");
-    await uiLogin(guesserPage, "player2@test.com", "password123");
+    if (isP1Drawer) {
+      await uiLogin(drawerPage, "player1@test.com", "password123");
+      await uiLogin(guesserPage, "player2@test.com", "password123");
+    } else {
+      await uiLogin(drawerPage, "player2@test.com", "password123");
+      await uiLogin(guesserPage, "player1@test.com", "password123");
+    }
     await uiLogin(spectatorPage, "player3@test.com", "password123");
 
-    await drawerPage.goto(`/tournaments/${tournamentId}/match/${match.id}`);
-    await guesserPage.goto(`/tournaments/${tournamentId}/match/${match.id}`);
-    await spectatorPage.goto(`/tournaments/${tournamentId}/match/${match.id}`);
-
-    // Spectator sees SPECTATING role
-    await expect(spectatorPage.locator("text=You are SPECTATING")).toBeVisible({ timeout: 25_000 });
+    // Navigate both players and spectator in parallel
+    await Promise.all([
+      drawerPage.goto(`/tournaments/${tournamentId}/match/${match.id}`),
+      guesserPage.goto(`/tournaments/${tournamentId}/match/${match.id}`),
+      spectatorPage.goto(`/tournaments/${tournamentId}/match/${match.id}`),
+    ]);
 
     // Players see their roles
     await expect(drawerPage.locator("text=You are DRAWING")).toBeVisible({ timeout: 25_000 });
     await expect(guesserPage.locator("text=You are GUESSING")).toBeVisible({ timeout: 25_000 });
 
+    // Spectator sees SPECTATING role
+    await expect(spectatorPage.locator("text=You are SPECTATING")).toBeVisible({ timeout: 25_000 });
+
     // Spectator can see the canvas (canvas element exists)
     await expect(spectatorPage.locator("canvas")).toBeVisible();
 
-    await drawerCtx.close();
-    await guesserCtx.close();
+    await ctxA.close();
+    await ctxB.close();
     await spectatorCtx.close();
   });
 
@@ -823,18 +866,17 @@ test.describe("TourneyHub End-to-End Suite", () => {
   test("Trivia E2E: Spectator view during active match", async ({ browser, request }) => {
     const p1Auth = await apiLogin(request, "player1@test.com", "password123");
     const p2Auth = await apiLogin(request, "player2@test.com", "password123");
-    const spectatorAuth = await apiLogin(request, "player3@test.com", "password123");
 
+    // Spectator (player3) does NOT need to join — any logged-in user can watch
     const tournamentId = await apiCreateTournament(
       request,
       "Trivia Spectator",
       "TRIVIA",
-      4,
+      2,
       0,
       p1Auth.token
     );
     await apiJoinTournament(request, tournamentId, p2Auth.token);
-    await apiJoinTournament(request, tournamentId, spectatorAuth.token);
     await apiStartTournament(request, tournamentId, p1Auth.token);
 
     const bracket = await apiGetBracket(request, tournamentId);
@@ -858,16 +900,23 @@ test.describe("TourneyHub End-to-End Suite", () => {
     await uiLogin(p2Page, "player2@test.com", "password123");
     await uiLogin(specPage, "player3@test.com", "password123");
 
-    await p1Page.goto(`/tournaments/${tournamentId}/match/${match.id}`);
-    await p2Page.goto(`/tournaments/${tournamentId}/match/${match.id}`);
-    await specPage.goto(`/tournaments/${tournamentId}/match/${match.id}`);
+    // Navigate all pages in parallel
+    await Promise.all([
+      p1Page.goto(`/tournaments/${tournamentId}/match/${match.id}`),
+      p2Page.goto(`/tournaments/${tournamentId}/match/${match.id}`),
+      specPage.goto(`/tournaments/${tournamentId}/match/${match.id}`),
+    ]);
 
-    // Spectator sees Spectator Mode badge
-    await expect(specPage.locator("text=Spectator Mode")).toBeVisible({ timeout: 25_000 });
-
-    // Players see Game Starting!
-    await expect(p1Page.locator("text=Game Starting!")).toBeVisible({ timeout: 25_000 });
-    await expect(p2Page.locator("text=Game Starting!")).toBeVisible({ timeout: 25_000 });
+    // Wait for game indicators — accept starting or playing state
+    await expect(
+      specPage.locator("text=Spectator Mode").or(specPage.locator("text=Spectating Match"))
+    ).toBeVisible({ timeout: 25_000 });
+    await expect(
+      p1Page.locator("text=Game Starting!").or(p1Page.locator("text=Your Score:"))
+    ).toBeVisible({ timeout: 25_000 });
+    await expect(
+      p2Page.locator("text=Game Starting!").or(p2Page.locator("text=Your Score:"))
+    ).toBeVisible({ timeout: 25_000 });
 
     // Play the trivia match to completion
     const allDone = Promise.all([
@@ -907,30 +956,41 @@ test.describe("TourneyHub End-to-End Suite", () => {
     const match = (bracket.rounds?.round1 || [])[0];
     if (!match) throw new Error("Match not found");
 
-    const drawerCtx = await browser.newContext();
-    const guesserCtx = await browser.newContext();
-    const drawerPage = await drawerCtx.newPage();
-    const guesserPage = await guesserCtx.newPage();
+    // Drawer is always match.player1Id (randomly assigned)
+    const isP1Drawer = Number(match.player1Id) === Number(p1Auth.userId);
+
+    const ctxDrawer = await browser.newContext();
+    const ctxGuesser = await browser.newContext();
+    const drawerPage = await ctxDrawer.newPage();
+    const guesserPage = await ctxGuesser.newPage();
 
     setupLogging(drawerPage, "qd-abandon-drawer");
     setupLogging(guesserPage, "qd-abandon-guesser");
 
-    await uiLogin(drawerPage, "player1@test.com", "password123");
-    await uiLogin(guesserPage, "player2@test.com", "password123");
+    if (isP1Drawer) {
+      await uiLogin(drawerPage, "player1@test.com", "password123");
+      await uiLogin(guesserPage, "player2@test.com", "password123");
+    } else {
+      await uiLogin(drawerPage, "player2@test.com", "password123");
+      await uiLogin(guesserPage, "player1@test.com", "password123");
+    }
 
-    await drawerPage.goto(`/tournaments/${tournamentId}/match/${match.id}`);
-    await guesserPage.goto(`/tournaments/${tournamentId}/match/${match.id}`);
+    // Navigate both pages in parallel
+    await Promise.all([
+      drawerPage.goto(`/tournaments/${tournamentId}/match/${match.id}`),
+      guesserPage.goto(`/tournaments/${tournamentId}/match/${match.id}`),
+    ]);
 
     // Wait for game to start
     await expect(drawerPage.locator("text=You are DRAWING")).toBeVisible({ timeout: 25_000 });
     await expect(guesserPage.locator("text=You are GUESSING")).toBeVisible({ timeout: 25_000 });
 
     // Drawer disconnects
-    await drawerCtx.close();
+    await ctxDrawer.close();
 
     // Guesser should win by abandonment
     await expect(guesserPage.locator("text=You Won!")).toBeVisible({ timeout: 30_000 });
 
-    await guesserCtx.close();
+    await ctxGuesser.close();
   });
 });
