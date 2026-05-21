@@ -24,7 +24,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Trophy, Clock, CheckCircle, XCircle } from 'lucide-react'
 
-export default function TriviaGame({ socket, matchId, player1Id, player2Id, currentUserId }) {
+export default function TriviaGame({ socket, matchId, player1Id, player2Id, currentUserId, isSpectator }) {
   // ============================================================
   // ALL STATE for the trivia game
   // ============================================================
@@ -44,7 +44,7 @@ export default function TriviaGame({ socket, matchId, player1Id, player2Id, curr
     if (!socket) return
 
     const joinMatch = () => {
-      socket.emit('trivia:join', { matchId, player1Id, player2Id })
+      socket.emit('trivia:join', { matchId, playerId: Number(currentUserId) })
     }
 
     // Join immediately if already connected
@@ -113,7 +113,7 @@ export default function TriviaGame({ socket, matchId, player1Id, player2Id, curr
       socket.off('trivia:round_over', onRoundOver)
       socket.off('trivia:match_over', onMatchOver)
     }
-  }, [socket, matchId, player1Id, player2Id])
+  }, [socket, matchId, currentUserId])
 
   // ============================================================
   // TIMER — counts down every second
@@ -163,13 +163,18 @@ export default function TriviaGame({ socket, matchId, player1Id, player2Id, curr
   // WAITING state
   if (gameStatus === 'waiting' || gameStatus === 'starting') {
     return (
-      <Card className="max-w-lg mx-auto">
-        <CardContent className="p-8 text-center">
-          <Trophy className="h-12 w-12 text-primary mx-auto mb-4" />
-          <h2 className="text-xl font-bold mb-2">
-            {gameStatus === 'starting' ? 'Game starting...' : 'Waiting for opponent...'}
+      <Card className="max-w-lg mx-auto border-neutral-800 bg-neutral-950/40">
+        <CardContent className="p-8 text-center space-y-4">
+          {isSpectator && (
+            <div className="bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs font-bold px-3 py-1 rounded-full w-max mx-auto uppercase tracking-wider animate-pulse">
+              Spectator Mode
+            </div>
+          )}
+          <Trophy className="h-12 w-12 text-amber-500 mx-auto mb-2 animate-bounce" />
+          <h2 className="text-xl font-bold text-neutral-100">
+            {isSpectator ? 'Waiting for match to begin...' : (gameStatus === 'starting' ? 'Game starting...' : 'Waiting for opponent...')}
           </h2>
-          <p className="text-muted-foreground">Get ready!</p>
+          <p className="text-neutral-400 text-sm">Get ready for the Trivia Showdown!</p>
         </CardContent>
       </Card>
     )
@@ -179,17 +184,18 @@ export default function TriviaGame({ socket, matchId, player1Id, player2Id, curr
   if (gameStatus === 'finished' && finalResult) {
     const isWinner = finalResult.winnerId === Number(currentUserId)
     return (
-      <Card className="max-w-lg mx-auto">
-        <CardContent className="p-8 text-center">
-          <Trophy className={`h-12 w-12 mx-auto mb-4 ${isWinner ? 'text-primary' : 'text-muted-foreground'}`} />
-          <h2 className="text-2xl font-bold mb-2">
-            {isWinner ? 'You Won!' : 'Game Over'}
+      <Card className="max-w-lg mx-auto border-neutral-800 bg-neutral-950/40">
+        <CardContent className="p-8 text-center space-y-4">
+          <Trophy className={`h-12 w-12 mx-auto mb-2 ${isWinner && !isSpectator ? 'text-amber-500 animate-pulse' : 'text-neutral-600'}`} />
+          <h2 className="text-2xl font-black tracking-tight text-neutral-100">
+            {isSpectator ? 'Match Finished' : (isWinner ? 'Victory!' : 'Defeat')}
           </h2>
-          <div className="text-muted-foreground">
+          <div className="text-neutral-400 space-y-2 bg-neutral-900/60 p-4 rounded-lg border border-neutral-800/80">
             {Object.entries(scores).map(([playerId, score]) => (
-              <p key={playerId} className={`text-lg ${Number(playerId) === Number(currentUserId) ? 'text-foreground font-semibold' : ''}`}>
-                Player {playerId}: {score} pts
-              </p>
+              <div key={playerId} className={`flex justify-between items-center py-1 border-b border-neutral-800 last:border-0 ${Number(playerId) === Number(currentUserId) ? 'text-amber-400 font-bold' : 'text-neutral-300'}`}>
+                <span>{Number(playerId) === Number(currentUserId) ? 'You' : `Player ${playerId}`}</span>
+                <span>{score} pts</span>
+              </div>
             ))}
           </div>
         </CardContent>
@@ -199,47 +205,57 @@ export default function TriviaGame({ socket, matchId, player1Id, player2Id, curr
 
   // PLAYING / ANSWERED / RESULT states
   return (
-    <Card className="max-w-lg mx-auto">
+    <Card className="max-w-lg mx-auto border-neutral-850 bg-gradient-to-b from-neutral-900 to-neutral-950 shadow-xl">
       <CardContent className="p-6 space-y-6">
+        {isSpectator && (
+          <div className="bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs font-bold py-1.5 rounded-md text-center uppercase tracking-wider animate-pulse">
+            Spectating Match
+          </div>
+        )}
+
         {/* Score bar */}
-        <div className="flex justify-between text-sm text-muted-foreground">
-          <span>Your score: {scores[currentUserId] || 0}</span>
-          <div className="flex items-center gap-1">
-            <Clock className="h-4 w-4" />
-            <span className={timeLeft <= 3 ? 'text-danger font-bold' : ''}>{timeLeft}s</span>
+        <div className="flex justify-between items-center text-sm text-neutral-400 border-b border-neutral-800/60 pb-3">
+          <span>{isSpectator ? 'Spectating' : `Your Score: ${scores[currentUserId] || 0}`}</span>
+          <div className="flex items-center gap-1.5 bg-neutral-900 px-2.5 py-1 rounded-full border border-neutral-800">
+            <Clock className={`h-3.5 w-3.5 ${timeLeft <= 3 ? 'text-red-500 animate-pulse' : 'text-amber-400'}`} />
+            <span className={timeLeft <= 3 ? 'text-red-550 font-extrabold' : 'font-mono'}>{timeLeft}s</span>
           </div>
         </div>
 
         {/* Question text */}
         {question && (
-          <>
-            <h2 className="text-lg font-semibold">{question.text}</h2>
+          <div className="space-y-4">
+            <h2 className="text-lg font-bold text-neutral-100 leading-snug">{question.text}</h2>
 
             {/* Answer options */}
-            <div className="grid grid-cols-1 gap-2">
+            <div className="grid grid-cols-1 gap-2.5">
               {question.options.map((option, i) => {
                 // Determine button styling based on game state
                 let variant = 'outline'
                 let icon = null
+                let customStyle = ''
 
                 if (gameStatus === 'result' && feedback) {
                   if (option === feedback.correctAnswer) {
                     variant = 'default'  // highlight correct answer
-                    icon = <CheckCircle className="h-4 w-4 text-success" />
+                    customStyle = 'bg-emerald-500/20 border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/20 hover:text-emerald-400'
+                    icon = <CheckCircle className="h-4 w-4 text-emerald-400 shrink-0" />
                   } else if (option === selectedAnswer && !feedback.correct) {
-                    icon = <XCircle className="h-4 w-4 text-danger" />
+                    customStyle = 'bg-red-500/20 border-red-500/40 text-red-400 hover:bg-red-500/20 hover:text-red-400'
+                    icon = <XCircle className="h-4 w-4 text-red-400 shrink-0" />
                   }
                 } else if (option === selectedAnswer) {
                   variant = 'secondary'  // highlight selected
+                  customStyle = 'bg-amber-500/10 border-amber-500/30 text-amber-400'
                 }
 
                 return (
                   <Button
                     key={i}
                     variant={variant}
-                    className="justify-start gap-2 h-auto py-3 px-4 text-left"
+                    className={`justify-start gap-2.5 h-auto py-3.5 px-4 text-left border border-neutral-800/80 hover:border-neutral-700/80 transition-all ${customStyle}`}
                     onClick={() => handleAnswer(option)}
-                    disabled={gameStatus !== 'playing'}
+                    disabled={gameStatus !== 'playing' || isSpectator}
                   >
                     {icon}
                     {option}
@@ -250,11 +266,11 @@ export default function TriviaGame({ socket, matchId, player1Id, player2Id, curr
 
             {/* Feedback message */}
             {gameStatus === 'result' && feedback && (
-              <div className={`text-center text-sm font-medium ${feedback.correct ? 'text-success' : 'text-danger'}`}>
-                {feedback.correct ? `Correct! +${feedback.points} pts` : `Wrong! Answer: ${feedback.correctAnswer}`}
+              <div className={`text-center text-sm font-semibold rounded-lg p-3 ${feedback.correct ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-red-500/10 text-red-455 border border-red-500/20'}`}>
+                {feedback.correct ? `Correct! +${feedback.points} pts` : `Round Over! Correct Answer: ${feedback.correctAnswer}`}
               </div>
             )}
-          </>
+          </div>
         )}
       </CardContent>
     </Card>

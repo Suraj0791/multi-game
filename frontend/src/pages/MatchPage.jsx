@@ -57,6 +57,9 @@ export default function MatchPage() {
     );
   }
 
+  // Compute if current user is a spectator
+  const isSpectator = Number(userId) !== Number(match.player1Id) && Number(userId) !== Number(match.player2Id);
+
   // Decide which game component to render based on game type
   // The match object has a gameType field from the tournament
   const GameComponent =
@@ -70,6 +73,7 @@ export default function MatchPage() {
         player1Id={match.player1Id}
         player2Id={match.player2Id}
         currentUserId={userId}
+        isSpectator={isSpectator}
       />
     </div>
   );
