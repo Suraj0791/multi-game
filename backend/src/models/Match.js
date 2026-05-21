@@ -35,9 +35,16 @@ export async function getMatchesByTournament(tournamentId) {
   return result.rows;
 }
 
-// Get ONE match by its ID
+// Get ONE match by its ID (includes player emails for bot detection)
 export async function getMatchById(matchId) {
-  const result = await query(`SELECT * FROM matches WHERE id = $1`, [matchId]);
+  const result = await query(
+    `SELECT m.*, u1.email AS player_1_email, u2.email AS player_2_email
+     FROM matches m
+     LEFT JOIN users u1 ON m.player_1_id = u1.id
+     LEFT JOIN users u2 ON m.player_2_id = u2.id
+     WHERE m.id = $1`,
+    [matchId]
+  );
   return result.rows[0];
 }
 

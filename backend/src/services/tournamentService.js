@@ -6,7 +6,7 @@ import {
   updateTournamentStatus
 } from '../models/Tournament.js';
 import { getPlayersByTournament, addPlayer, updatePlayerPaymentStatus } from '../models/TournamentPlayer.js';
-import { createMatch, getMatchesByTournament } from '../models/Match.js';
+import { createMatch, getMatchesByTournament, updateMatchWinner } from '../models/Match.js';
 import { createUser, findByEmail } from '../models/User.js';
 
 export async function createTournament(name, game_type, max_players, entry_fee, host_id) {
@@ -179,13 +179,13 @@ export async function getTournamentMatches(id) {
 }
 
 // Group matches by round for the bracket UI
-const BOT_CREDENTIALS = [
+export const BOT_CREDENTIALS = [
   { username: 'Bot_Alice', email: 'bot_alice@tourneyhub.demo' },
   { username: 'Bot_Bob', email: 'bot_bob@tourneyhub.demo' },
   { username: 'Bot_Charlie', email: 'bot_charlie@tourneyhub.demo' },
 ];
 
-async function getOrCreateBotUser({ username, email }) {
+export async function getOrCreateBotUser({ username, email }) {
   const existing = await findByEmail(email);
   if (existing) return existing;
   const hashedPassword = await bcrypt.hash('demo_bot_pass', 10);
@@ -194,7 +194,7 @@ async function getOrCreateBotUser({ username, email }) {
 
 export async function createDemoTournament(hostId) {
   const name = 'Demo Tournament';
-  const gameType = Math.random() > 0.5 ? 'TRIVIA' : 'QUICK_DRAW';
+  const gameType = 'TRIVIA';
   const maxPlayers = 4;
   const entryFee = 0;
 
@@ -210,21 +210,35 @@ export async function createDemoTournament(hostId) {
   }
 
   const players = await getPlayersByTournament(tournament.id);
-  const shuffledPlayers = players.sort(() => Math.random() - 0.5);
+  const hostAsPlayer = players.find(p => Number(p.player_id) === Number(hostId));
+  const botsInTournament = players.filter(p => Number(p.player_id) !== Number(hostId));
 
-  let matchNumber = 1;
-  for (let i = 0; i < shuffledPlayers.length; i += 2) {
-    const p1 = shuffledPlayers[i];
-    const p2 = shuffledPlayers[i + 1];
-    if (p1 && p2) {
-      await createMatch(tournament.id, p1.player_id, p2.player_id, 1, matchNumber);
-      matchNumber++;
-    }
-  }
+  await createMatch(tournament.id, hostAsPlayer.player_id, botsInTournament[0].player_id, 1, 1);
+  await createMatch(tournament.id, botsInTournament[1].player_id, botsInTournament[2].player_id, 1, 2);
 
   await updateTournamentStatus(tournament.id, 'IN_PROGRESS');
 
-  return { tournamentId: tournament.id, status: 'IN_PROGRESS', gameType };
+  const matches = await getMatchesByTournament(tournament.id);
+
+  const round1Match1 = matches.find(m => m.round_number === 1 && m.match_number === 1);
+  const round1Match2 = matches.find(m => m.round_number === 1 && m.match_number === 2);
+
+  if (round1Match1 && round1Match2) {
+    await updateMatchWinner(round1Match1.id, hostId);
+    await updateMatchWinner(round1Match2.id, botsInTournament[1].player_id);
+
+    await createMatch(tournament.id, hostId, botsInTournament[1].player_id, 2, 1);
+
+    const updatedMatches = await getMatchesByTournament(tournament.id);
+    const finalMatch = updatedMatches.find(m => m.round_number === 2);
+    if (finalMatch) {
+      await updateMatchWinner(finalMatch.id, hostId);
+    }
+  }
+
+  await updateTournamentStatus(tournament.id, 'COMPLETED');
+
+  return { tournamentId: tournament.id, status: 'COMPLETED', gameType };
 }
 
 export async function getTournamentBracket(id) {

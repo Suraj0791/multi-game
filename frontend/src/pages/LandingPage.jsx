@@ -1,10 +1,10 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Trophy, Swords, Brain, Users, ArrowRight, Sparkles } from 'lucide-react'
+import { Trophy, Swords, Brain, Users, ArrowRight, Sparkles, LayoutDashboard } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { guestLogin } from '@/api/authApi'
-import { createDemoTournament } from '@/api/tournamentApi'
+import { createDemoTournament, createVsBotMatch } from '@/api/tournamentApi'
 import useAuthStore from '@/stores/authStore'
 
 const FEATURES = [
@@ -42,12 +42,8 @@ export default function LandingPage() {
   const navigate = useNavigate()
   const login = useAuthStore((state) => state.login)
   const token = useAuthStore((state) => state.token)
+  const userId = useAuthStore((state) => state.userId)
   const [loading, setLoading] = useState(null)
-
-  if (token) {
-    navigate('/tournaments', { replace: true })
-    return null
-  }
 
   const handleGuestLogin = async () => {
     setLoading('guest')
@@ -63,10 +59,26 @@ export default function LandingPage() {
   const handleDemo = async () => {
     setLoading('demo')
     try {
-      const res = await guestLogin()
-      login(res.token, res.userId)
+      if (!token) {
+        const res = await guestLogin()
+        login(res.token, res.userId)
+      }
       const demo = await createDemoTournament()
       navigate(`/tournaments/${demo.tournamentId}`)
+    } catch {
+      setLoading(null)
+    }
+  }
+
+  const handleVsBot = async (gameType) => {
+    setLoading('vsbot')
+    try {
+      if (!token) {
+        const res = await guestLogin()
+        login(res.token, res.userId)
+      }
+      const match = await createVsBotMatch(gameType)
+      navigate(`/tournaments/${match.tournamentId}/match/${match.matchId}`)
     } catch {
       setLoading(null)
     }
@@ -81,12 +93,32 @@ export default function LandingPage() {
             <span className="font-bold text-foreground text-lg">TourneyHub</span>
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="ghost" size="sm" onClick={() => navigate('/login')}>
-              Sign in
-            </Button>
-            <Button size="sm" onClick={() => navigate('/register')}>
-              Get Started
-            </Button>
+            {token ? (
+              <>
+                <Button variant="ghost" size="sm" onClick={() => navigate('/tournaments')}>
+                  Tournaments
+                </Button>
+                <Button variant="ghost" size="sm" onClick={() => navigate(`/profile/${userId}`)}>
+                  Profile
+                </Button>
+                <Button size="sm" onClick={() => {
+                  localStorage.removeItem('token')
+                  localStorage.removeItem('userId')
+                  window.location.reload()
+                }}>
+                  Logout
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button variant="ghost" size="sm" onClick={() => navigate('/login')}>
+                  Sign in
+                </Button>
+                <Button size="sm" onClick={() => navigate('/register')}>
+                  Get Started
+                </Button>
+              </>
+            )}
           </div>
         </div>
       </nav>
@@ -113,15 +145,26 @@ export default function LandingPage() {
           </p>
 
           <div className="flex items-center justify-center gap-3 flex-wrap">
-            <Button
-              size="lg"
-              className="gap-2 text-base h-12 px-6"
-              onClick={handleGuestLogin}
-              disabled={loading !== null}
-            >
-              {loading === 'guest' ? 'Joining...' : 'Try as Guest'}
-              <ArrowRight className="h-4 w-4" />
-            </Button>
+            {token ? (
+              <Button
+                size="lg"
+                className="gap-2 text-base h-12 px-6"
+                onClick={() => navigate('/tournaments')}
+              >
+                Go to Tournaments
+                <LayoutDashboard className="h-4 w-4" />
+              </Button>
+            ) : (
+              <Button
+                size="lg"
+                className="gap-2 text-base h-12 px-6"
+                onClick={handleGuestLogin}
+                disabled={loading !== null}
+              >
+                {loading === 'guest' ? 'Joining...' : 'Try as Guest (No Sign-up)'}
+                <ArrowRight className="h-4 w-4" />
+              </Button>
+            )}
             <Button
               size="lg"
               variant="secondary"
@@ -129,36 +172,75 @@ export default function LandingPage() {
               onClick={handleDemo}
               disabled={loading !== null}
             >
-              {loading === 'demo' ? 'Loading...' : 'Load Demo Tournament'}
+              {loading === 'demo' ? 'Loading...' : 'See Demo Tournament'}
               <Users className="h-4 w-4" />
             </Button>
           </div>
 
+          {/* Play vs Bot buttons */}
+          <div className="flex items-center justify-center gap-3 flex-wrap mt-4">
+            <span className="text-sm text-muted-foreground mr-1">Play vs Bot:</span>
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5"
+              onClick={() => handleVsBot('TRIVIA')}
+              disabled={loading !== null}
+            >
+              {loading === 'vsbot' ? '...' : <><Brain className="h-3.5 w-3.5" /> Trivia</>}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5"
+              onClick={() => handleVsBot('QUICK_DRAW')}
+              disabled={loading !== null}
+            >
+              {loading === 'vsbot' ? '...' : <><Swords className="h-3.5 w-3.5" /> Quick Draw</>}
+            </Button>
+          </div>
+
           <p className="text-xs text-muted-foreground mt-4">
-            No sign-up required. Demo creates a live 4-player bracket instantly.
+            {token
+              ? 'Click "See Demo" to view a completed tournament bracket instantly, or browse existing tournaments.'
+              : 'No sign-up required. Demo creates a completed 4-player bracket so you can see how it works.'
+            }
           </p>
 
           <div className="mt-12 max-w-md mx-auto">
             <div className="bg-surface rounded-xl border border-border p-4">
-              <p className="text-xs text-muted-foreground mb-3 text-center">Bracket Preview</p>
-              <div className="grid grid-cols-2 gap-2">
-                {BRACKET_PREVIEW.map((p, i) => (
-                  <div
-                    key={i}
-                    className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm ${
-                      p.winner
-                        ? 'bg-primary/10 text-primary border border-primary/20'
-                        : 'bg-muted text-muted-foreground border border-border'
-                    }`}
-                  >
-                    <Trophy className={`h-3 w-3 ${p.winner ? '' : 'opacity-0'}`} />
-                    <span className={p.winner ? 'font-medium' : ''}>{p.name}</span>
+              <p className="text-xs text-muted-foreground mb-3 text-center">Demo Bracket (Completed)</p>
+              <div className="space-y-2">
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="col-span-2 text-[10px] text-muted-foreground font-medium px-1">Round 1</div>
+                  {BRACKET_PREVIEW.map((p, i) => (
+                    <div
+                      key={i}
+                      className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm ${
+                        p.winner
+                          ? 'bg-primary/10 text-primary border border-primary/20'
+                          : 'bg-muted text-muted-foreground border border-border'
+                      }`}
+                    >
+                      <Trophy className={`h-3 w-3 ${p.winner ? '' : 'opacity-0'}`} />
+                      <span className={p.winner ? 'font-medium' : ''}>{p.name}</span>
+                    </div>
+                  ))}
+                </div>
+                <div className="border-t border-border pt-2">
+                  <div className="grid grid-cols-1 gap-2">
+                    <div className="text-[10px] text-muted-foreground font-medium px-1">Round 2 (Final)</div>
+                    <div className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm bg-primary/10 text-primary border border-primary/20">
+                      <Trophy className="h-3 w-3" />
+                      <span className="font-medium">You</span>
+                      <span className="text-[10px] ml-auto text-primary/60">🏆 Champion</span>
+                    </div>
                   </div>
-                ))}
+                </div>
               </div>
               <div className="flex justify-center mt-2">
                 <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                  <Users className="h-3 w-3" /> 4 Players · Round 1
+                  <Users className="h-3 w-3" /> You vs 3 Bots · Tournament Completed
                 </div>
               </div>
             </div>

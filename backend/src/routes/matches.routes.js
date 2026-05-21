@@ -1,8 +1,11 @@
 import { Router } from 'express';
-import { completeMatch } from '../controllers/matchController.js';
+import { completeMatch, createVsBotMatch } from '../controllers/matchController.js';
 import { authenticate } from '../middleware/auth.middleware.js';
 
 const router = Router();
+
+// POST /matches/vs-bot — create a quick match against a bot opponent
+router.post('/vs-bot', authenticate, createVsBotMatch);
 
 // PUT /matches/:id/complete
 // We use authenticate because only logged-in users who played the match should be able to complete it

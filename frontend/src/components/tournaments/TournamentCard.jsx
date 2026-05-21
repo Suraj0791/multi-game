@@ -24,11 +24,10 @@ const GAME_LABELS = {
   QUICK_DRAW: 'Quick Draw',
 }
 
-// Map status to badge color variants
-const STATUS_COLORS = {
-  REGISTRATION: 'default',    // neutral
-  IN_PROGRESS: 'secondary',   // highlighted
-  COMPLETED: 'outline',       // muted
+const STATUS_CONFIG = {
+  REGISTRATION: { label: 'Registration', variant: 'secondary', icon: '🟡' },
+  IN_PROGRESS: { label: 'In Progress', variant: 'default', icon: '🟢' },
+  COMPLETED: { label: 'Completed', variant: 'outline', icon: '✅' },
 }
 
 export default function TournamentCard({ tournament }) {
@@ -46,8 +45,8 @@ export default function TournamentCard({ tournament }) {
           <h3 className="font-semibold text-foreground leading-tight">
             {tournament.name}
           </h3>
-          <Badge variant={STATUS_COLORS[tournament.status] || 'default'}>
-            {tournament.status}
+          <Badge variant={STATUS_CONFIG[tournament.status]?.variant || 'default'}>
+            {STATUS_CONFIG[tournament.status]?.icon || ''} {STATUS_CONFIG[tournament.status]?.label || tournament.status}
           </Badge>
         </div>
 

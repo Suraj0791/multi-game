@@ -85,3 +85,9 @@ export async function createPaymentOrder(tournamentId) {
   const response = await api.post(`/tournaments/${tournamentId}/pay`);
   return response.data;
 }
+
+// POST /matches/vs-bot → create a quick match against a bot
+export async function createVsBotMatch(gameType) {
+  const response = await api.post('/matches/vs-bot', { gameType });
+  return response.data;
+}

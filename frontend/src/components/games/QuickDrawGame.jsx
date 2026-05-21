@@ -33,8 +33,10 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Pencil, Eye, Trophy } from "lucide-react";
+import { Pencil, Eye, Trophy, Clock, XCircle } from "lucide-react";
 import { toast } from "sonner";
+
+const MAX_ATTEMPTS = 5;
 
 export default function QuickDrawGame({
   socket,
@@ -44,27 +46,21 @@ export default function QuickDrawGame({
   currentUserId,
   isSpectator,
 }) {
-  // ============================================================
-  // STATE
-  // ============================================================
   const [gameStatus, setGameStatus] = useState("waiting");
-  const [wordToDraw, setWordToDraw] = useState(null); // only drawer sees this
-  const [guess, setGuess] = useState(""); // guesser's text input
-  const [guessMessage, setGuessMessage] = useState(null); // "Try again!" feedback
+  const [wordToDraw, setWordToDraw] = useState(null);
+  const [guess, setGuess] = useState("");
+  const [guessMessage, setGuessMessage] = useState(null);
   const [finalResult, setFinalResult] = useState(null);
-  const [isDrawing, setIsDrawing] = useState(false); // is mouse held down?
+  const [isDrawing, setIsDrawing] = useState(false);
+  const [timeRemaining, setTimeRemaining] = useState(60);
+  const [attemptsLeft, setAttemptsLeft] = useState(MAX_ATTEMPTS);
 
-  // Canvas ref — gives us direct access to the <canvas> DOM element
-  // We need this because canvas drawing uses imperative DOM APIs,
-  // not React's declarative JSX.
   const canvasRef = useRef(null);
 
-  // Determine role: player1 draws, player2 guesses
   const isDrawer = Number(currentUserId) === player1Id;
   const userIdNum = Number(currentUserId);
   const safeUserId = !isNaN(userIdNum) && userIdNum > 0 ? userIdNum : null;
 
-  // Use refs to keep stable references for socket listener cleanup
   const joinMatchRef = useRef(null);
   const onGameStatusRef = useRef(null);
   const onReceiveStrokeRef = useRef(null);
@@ -72,10 +68,9 @@ export default function QuickDrawGame({
   const onWrongGuessRef = useRef(null);
   const onMatchOverRef = useRef(null);
   const onErrorRef = useRef(null);
+  const onTimerRef = useRef(null);
+  const onAttemptRef = useRef(null);
 
-  // ============================================================
-  // SOCKET LISTENERS
-  // ============================================================
   useEffect(() => {
     if (!socket || !safeUserId) return;
 
@@ -125,12 +120,21 @@ export default function QuickDrawGame({
 
     const onWrongGuess = (data) => {
       setGuessMessage(data.message);
-      setTimeout(() => setGuessMessage(null), 2000);
+      setAttemptsLeft(data.attemptsLeft ?? 0);
+      setTimeout(() => setGuessMessage(null), 3000);
     };
 
     const onMatchOver = (data) => {
       setFinalResult(data);
       setGameStatus("finished");
+    };
+
+    const onTimer = (data) => {
+      setTimeRemaining(data.timeRemaining);
+    };
+
+    const onAttemptUpdate = (data) => {
+      setAttemptsLeft(data.attemptsLeft);
     };
 
     const onError = (data) => {
@@ -146,13 +150,14 @@ export default function QuickDrawGame({
       });
     };
 
-    // Store refs for cleanup
     onGameStatusRef.current = onGameStatus;
     onReceiveStrokeRef.current = onReceiveStroke;
     onDrawHistoryRef.current = onDrawHistory;
     onWrongGuessRef.current = onWrongGuess;
     onMatchOverRef.current = onMatchOver;
     onErrorRef.current = onError;
+    onTimerRef.current = onTimer;
+    onAttemptRef.current = onAttemptUpdate;
     joinMatchRef.current = joinMatch;
 
     socket.on("game_status", onGameStatus);
@@ -161,6 +166,8 @@ export default function QuickDrawGame({
     socket.on("wrong_guess", onWrongGuess);
     socket.on("match_over", onMatchOver);
     socket.on("error", onError);
+    socket.on("quickdraw:timer", onTimer);
+    socket.on("quickdraw:attempt_update", onAttemptUpdate);
 
     if (socket.connected) {
       joinMatch();
@@ -177,6 +184,8 @@ export default function QuickDrawGame({
       socket.off("wrong_guess", onWrongGuessRef.current);
       socket.off("match_over", onMatchOverRef.current);
       socket.off("error", onErrorRef.current);
+      socket.off("quickdraw:timer", onTimerRef.current);
+      socket.off("quickdraw:attempt_update", onAttemptRef.current);
     };
   }, [socket, matchId, safeUserId, player1Id, player2Id]);
 
@@ -308,31 +317,49 @@ export default function QuickDrawGame({
 
   return (
     <div className="max-w-2xl mx-auto space-y-4">
-      {/* Role indicator — always visible so players know their role immediately */}
+      {/* Role indicator + Timer + Attempts bar */}
       <Card className="border-neutral-800 bg-neutral-900/60">
-        <CardContent className="p-3.5 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            {isSpectator ? (
-              <Eye className="h-4 w-4 text-amber-500 animate-pulse" />
-            ) : isDrawer ? (
-              <Pencil className="h-4 w-4 text-amber-400" />
-            ) : (
-              <Eye className="h-4 w-4 text-amber-400" />
+        <CardContent className="p-3.5 space-y-2">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              {isSpectator ? (
+                <Eye className="h-4 w-4 text-amber-500 animate-pulse" />
+              ) : isDrawer ? (
+                <Pencil className="h-4 w-4 text-amber-400" />
+              ) : (
+                <Eye className="h-4 w-4 text-amber-400" />
+              )}
+              <span className="text-sm font-semibold text-neutral-200">
+                {isSpectator ? "SPECTATING" : (isDrawer ? "DRAWING" : "GUESSING")}
+              </span>
+            </div>
+            {isDrawer && wordToDraw && (
+              <span className="text-sm font-bold text-amber-400 bg-amber-500/10 border border-amber-500/20 px-3 py-1 rounded-md">
+                Draw: <span className="uppercase">{wordToDraw}</span>
+              </span>
             )}
-            <span className="text-sm font-semibold text-neutral-200">
-              {isSpectator ? "You are SPECTATING" : (isDrawer ? "You are DRAWING" : "You are GUESSING")}
-            </span>
           </div>
-          {/* Drawer sees the word they need to draw (only after game starts) */}
-          {isDrawer && wordToDraw && (
-            <span className="text-sm font-bold text-amber-400 bg-amber-500/10 border border-amber-500/20 px-3 py-1 rounded-md">
-              Draw: <span className="uppercase">{wordToDraw}</span>
-            </span>
+          {/* Timer + Attempts bar — only visible during active play */}
+          {gameStatus === "playing" && (
+            <div className="flex items-center gap-4 text-xs">
+              <div className="flex items-center gap-1.5 bg-neutral-950 px-2.5 py-1 rounded-full border border-neutral-800">
+                <Clock className={`h-3.5 w-3.5 ${timeRemaining <= 10 ? 'text-red-500 animate-pulse' : 'text-amber-400'}`} />
+                <span className={timeRemaining <= 10 ? 'text-red-500 font-extrabold' : 'font-mono text-neutral-300'}>
+                  {Math.floor(timeRemaining / 60)}:{String(timeRemaining % 60).padStart(2, '0')}
+                </span>
+              </div>
+              {!isDrawer && !isSpectator && (
+                <div className="flex items-center gap-1.5 bg-neutral-950 px-2.5 py-1 rounded-full border border-neutral-800">
+                  <XCircle className="h-3.5 w-3.5 text-red-400" />
+                  <span className="text-neutral-300">{attemptsLeft}/{MAX_ATTEMPTS} guesses</span>
+                </div>
+              )}
+            </div>
           )}
         </CardContent>
       </Card>
 
-      {/* Waiting message (shown inline, does NOT cover role indicator) */}
+      {/* Waiting message */}
       {gameStatus === "waiting" && (
         <Card className="border-neutral-800 bg-neutral-950 shadow-2xl">
           <CardContent className="p-8 text-center space-y-4">
@@ -360,6 +387,9 @@ export default function QuickDrawGame({
             <h2 className="text-2xl font-black text-neutral-100 tracking-tight">
               {isSpectator ? "Match Finished" : (finalResult.winnerId === Number(currentUserId) ? "You Won!" : "Game Over")}
             </h2>
+            {finalResult.message && (
+              <p className="text-sm text-neutral-500">{finalResult.message}</p>
+            )}
             <p className="text-neutral-400 text-sm bg-neutral-950/60 p-3 rounded-lg border border-neutral-800/80">
               The secret word was: <span className="font-extrabold text-amber-400 uppercase tracking-wide">{finalResult.word}</span>
             </p>
@@ -386,7 +416,7 @@ export default function QuickDrawGame({
         </CardContent>
       </Card>
 
-      {/* Guess input (only for guesser, hidden for spectators) */}
+      {/* Guess input */}
       {!isDrawer && !isSpectator && (
         <form onSubmit={handleGuess} className="flex gap-2">
           <Input

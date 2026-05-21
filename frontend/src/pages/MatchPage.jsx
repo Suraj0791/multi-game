@@ -15,6 +15,8 @@ import useAuthStore from "@/stores/authStore";
 import api from "@/api/axiosClient";
 import TriviaGame from "@/components/games/TriviaGame";
 import QuickDrawGame from "@/components/games/QuickDrawGame";
+import { Card, CardContent } from "@/components/ui/card";
+import { Trophy } from "lucide-react";
 
 // Fetch match details — we need to know the game type and player IDs
 async function getMatch(tournamentId, matchId) {
@@ -57,6 +59,25 @@ export default function MatchPage() {
       <div className="flex items-center justify-center py-20">
         <p className="text-danger">Match not found.</p>
       </div>
+    );
+  }
+
+  // If match is already completed, show result instead of trying to play
+  if (match.status === 'COMPLETED') {
+    const isWinner = Number(userId) === Number(match.winnerId);
+    return (
+      <Card className="max-w-lg mx-auto border-neutral-800 bg-neutral-950/40 mt-8">
+        <CardContent className="p-8 text-center space-y-4">
+          <Trophy className={`h-12 w-12 mx-auto ${isWinner ? 'text-amber-500 animate-pulse' : 'text-neutral-600'}`} />
+          <h2 className="text-2xl font-black tracking-tight text-neutral-100">
+            {isWinner ? 'You Won!' : 'Match Over'}
+          </h2>
+          <div className="text-neutral-400 text-sm space-y-1">
+            <p>{match.player1Name} vs {match.player2Name}</p>
+            <p className="text-xs text-muted-foreground">This match has already been completed.</p>
+          </div>
+        </CardContent>
+      </Card>
     );
   }
 
