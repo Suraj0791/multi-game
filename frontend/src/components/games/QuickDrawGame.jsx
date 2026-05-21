@@ -60,50 +60,53 @@ export default function QuickDrawGame({
   const canvasRef = useRef(null);
 
   // Determine role: player1 draws, player2 guesses
-  // (based on how your backend assigns roles)
   const isDrawer = Number(currentUserId) === player1Id;
+  const userIdNum = Number(currentUserId);
+  const safeUserId = !isNaN(userIdNum) && userIdNum > 0 ? userIdNum : null;
+
+  // Use refs to keep stable references for socket listener cleanup
+  const joinMatchRef = useRef(null);
+  const onGameStatusRef = useRef(null);
+  const onReceiveStrokeRef = useRef(null);
+  const onDrawHistoryRef = useRef(null);
+  const onWrongGuessRef = useRef(null);
+  const onMatchOverRef = useRef(null);
+  const onErrorRef = useRef(null);
 
   // ============================================================
   // SOCKET LISTENERS
   // ============================================================
   useEffect(() => {
-    if (!socket) return;
+    if (!socket || !safeUserId) return;
 
     const onGameStatus = (data) => {
       setGameStatus("playing");
-      // Backend sends the word only to the drawer
       if (data.wordToDraw) {
         setWordToDraw(data.wordToDraw);
       }
     };
 
-    // Receive strokes from the other player (drawn on their canvas)
     const onReceiveStroke = (data) => {
       const canvas = canvasRef.current;
       if (!canvas) return;
       const ctx = canvas.getContext("2d");
-
       if (data.type === "start") {
         ctx.beginPath();
         ctx.moveTo(data.x, data.y);
       } else {
         ctx.lineTo(data.x, data.y);
-        ctx.strokeStyle = "#F59E0B"; // gold color matching our theme
+        ctx.strokeStyle = "#F59E0B";
         ctx.lineWidth = 3;
         ctx.lineCap = "round";
         ctx.stroke();
       }
     };
 
-    // Redraw history on reconnection
     const onDrawHistory = (data) => {
       const canvas = canvasRef.current;
       if (!canvas) return;
       const ctx = canvas.getContext("2d");
-
-      // Clear canvas first
       ctx.clearRect(0, 0, canvas.width, canvas.height);
-
       if (data.strokes) {
         data.strokes.forEach((stroke) => {
           if (stroke.type === "start") {
@@ -134,7 +137,24 @@ export default function QuickDrawGame({
       toast.error(data.message || "An error occurred");
     };
 
-    // Register all socket listeners BEFORE emitting join
+    const joinMatch = () => {
+      socket.emit("join_match", {
+        matchId,
+        playerId: safeUserId,
+        player1Id,
+        player2Id,
+      });
+    };
+
+    // Store refs for cleanup
+    onGameStatusRef.current = onGameStatus;
+    onReceiveStrokeRef.current = onReceiveStroke;
+    onDrawHistoryRef.current = onDrawHistory;
+    onWrongGuessRef.current = onWrongGuess;
+    onMatchOverRef.current = onMatchOver;
+    onErrorRef.current = onError;
+    joinMatchRef.current = joinMatch;
+
     socket.on("game_status", onGameStatus);
     socket.on("receive_stroke", onReceiveStroke);
     socket.on("draw_history", onDrawHistory);
@@ -142,33 +162,23 @@ export default function QuickDrawGame({
     socket.on("match_over", onMatchOver);
     socket.on("error", onError);
 
-    const joinMatch = () => {
-      socket.emit("join_match", {
-        matchId,
-        playerId: Number(currentUserId),
-        player1Id,
-        player2Id,
-      });
-    };
-
-    // Join immediately if already connected
     if (socket.connected) {
       joinMatch();
     }
 
-    // Re-join on connection/reconnection
     socket.on("connect", joinMatch);
 
     return () => {
-      socket.off("connect", joinMatch);
-      socket.off("game_status", onGameStatus);
-      socket.off("receive_stroke", onReceiveStroke);
-      socket.off("draw_history", onDrawHistory);
-      socket.off("wrong_guess", onWrongGuess);
-      socket.off("match_over", onMatchOver);
-      socket.off("error", onError);
+      const jm = joinMatchRef.current;
+      if (jm) socket.off("connect", jm);
+      socket.off("game_status", onGameStatusRef.current);
+      socket.off("receive_stroke", onReceiveStrokeRef.current);
+      socket.off("draw_history", onDrawHistoryRef.current);
+      socket.off("wrong_guess", onWrongGuessRef.current);
+      socket.off("match_over", onMatchOverRef.current);
+      socket.off("error", onErrorRef.current);
     };
-  }, [socket, matchId, currentUserId, player1Id, player2Id]);
+  }, [socket, matchId, safeUserId, player1Id, player2Id]);
 
   // ============================================================
   // CANVAS DRAWING HANDLERS (only for the drawer)
@@ -296,51 +306,9 @@ export default function QuickDrawGame({
   // RENDER
   // ============================================================
 
-  // Render overlay for waiting / finished status, and render the base canvas layout.
-  // ALWAYS render the base canvas layout so canvasRef is mounted when draw history events arrive.
   return (
-    <div className="max-w-2xl mx-auto space-y-4 relative">
-      {/* Waiting screen overlay */}
-      {gameStatus === "waiting" && (
-        <div className="absolute inset-0 z-50 flex items-center justify-center bg-neutral-950/80 rounded-xl backdrop-blur-sm p-4">
-          <Card className="max-w-lg w-full border-neutral-800 bg-neutral-900 shadow-2xl">
-            <CardContent className="p-8 text-center space-y-4">
-              {isSpectator && (
-                <div className="bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs font-bold px-3 py-1 rounded-full w-max mx-auto uppercase tracking-wider animate-pulse">
-                  Spectator Mode
-                </div>
-              )}
-              <Pencil className="h-12 w-12 text-amber-500 mx-auto mb-2 animate-bounce" />
-              <h2 className="text-xl font-bold text-neutral-100">
-                {isSpectator ? 'Waiting for match to begin...' : 'Waiting for opponent...'}
-              </h2>
-              <p className="text-neutral-400 text-sm">Quick Draw match starting soon</p>
-            </CardContent>
-          </Card>
-        </div>
-      )}
-
-      {/* Match finished overlay */}
-      {gameStatus === "finished" && finalResult && (
-        <div className="absolute inset-0 z-50 flex items-center justify-center bg-neutral-950/90 rounded-xl backdrop-blur-sm p-4">
-          <Card className="max-w-lg w-full border-neutral-800 bg-neutral-900 shadow-2xl">
-            <CardContent className="p-8 text-center space-y-4">
-              <Trophy
-                className={`h-12 w-12 mx-auto mb-2 ${finalResult.winnerId === Number(currentUserId) && !isSpectator ? "text-amber-500 animate-pulse" : "text-neutral-600"
-                  }`}
-              />
-              <h2 className="text-2xl font-black text-neutral-100 tracking-tight">
-                {isSpectator ? "Match Finished" : (finalResult.winnerId === Number(currentUserId) ? "You Won!" : "Game Over")}
-              </h2>
-              <p className="text-neutral-400 text-sm bg-neutral-950/60 p-3 rounded-lg border border-neutral-800/80">
-                The secret word was: <span className="font-extrabold text-amber-400 uppercase tracking-wide">{finalResult.word}</span>
-              </p>
-            </CardContent>
-          </Card>
-        </div>
-      )}
-
-      {/* Role indicator */}
+    <div className="max-w-2xl mx-auto space-y-4">
+      {/* Role indicator — always visible so players know their role immediately */}
       <Card className="border-neutral-800 bg-neutral-900/60">
         <CardContent className="p-3.5 flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -355,7 +323,7 @@ export default function QuickDrawGame({
               {isSpectator ? "You are SPECTATING" : (isDrawer ? "You are DRAWING" : "You are GUESSING")}
             </span>
           </div>
-          {/* Drawer sees the word they need to draw */}
+          {/* Drawer sees the word they need to draw (only after game starts) */}
           {isDrawer && wordToDraw && (
             <span className="text-sm font-bold text-amber-400 bg-amber-500/10 border border-amber-500/20 px-3 py-1 rounded-md">
               Draw: <span className="uppercase">{wordToDraw}</span>
@@ -363,6 +331,41 @@ export default function QuickDrawGame({
           )}
         </CardContent>
       </Card>
+
+      {/* Waiting message (shown inline, does NOT cover role indicator) */}
+      {gameStatus === "waiting" && (
+        <Card className="border-neutral-800 bg-neutral-950 shadow-2xl">
+          <CardContent className="p-8 text-center space-y-4">
+            {isSpectator && (
+              <div className="bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs font-bold px-3 py-1 rounded-full w-max mx-auto uppercase tracking-wider animate-pulse">
+                Spectator Mode
+              </div>
+            )}
+            <Pencil className="h-12 w-12 text-amber-500 mx-auto mb-2 animate-bounce" />
+            <h2 className="text-xl font-bold text-neutral-100">
+              {isSpectator ? 'Waiting for match to begin...' : 'Waiting for opponent...'}
+            </h2>
+            <p className="text-neutral-400 text-sm">Quick Draw match starting soon</p>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Match finished */}
+      {gameStatus === "finished" && finalResult && (
+        <Card className="border-neutral-800 bg-neutral-950 shadow-2xl">
+          <CardContent className="p-8 text-center space-y-4">
+            <Trophy
+              className={`h-12 w-12 mx-auto mb-2 ${finalResult.winnerId === Number(currentUserId) && !isSpectator ? "text-amber-500 animate-pulse" : "text-neutral-600"}`}
+            />
+            <h2 className="text-2xl font-black text-neutral-100 tracking-tight">
+              {isSpectator ? "Match Finished" : (finalResult.winnerId === Number(currentUserId) ? "You Won!" : "Game Over")}
+            </h2>
+            <p className="text-neutral-400 text-sm bg-neutral-950/60 p-3 rounded-lg border border-neutral-800/80">
+              The secret word was: <span className="font-extrabold text-amber-400 uppercase tracking-wide">{finalResult.word}</span>
+            </p>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Canvas */}
       <Card className="border-neutral-800 overflow-hidden bg-neutral-950">
@@ -378,8 +381,7 @@ export default function QuickDrawGame({
             onTouchStart={handleTouchStart}
             onTouchMove={handleTouchMove}
             onTouchEnd={handleMouseUp}
-            className={`w-full border border-neutral-850 rounded bg-neutral-950 shadow-inner ${isDrawer && !isSpectator ? "cursor-crosshair" : "cursor-not-allowed"
-              }`}
+            className={`w-full border border-neutral-850 rounded bg-neutral-950 shadow-inner ${isDrawer && !isSpectator ? "cursor-crosshair" : "cursor-not-allowed"}`}
           />
         </CardContent>
       </Card>
@@ -399,7 +401,7 @@ export default function QuickDrawGame({
 
       {/* Guess feedback */}
       {guessMessage && (
-        <p className="text-center text-sm text-red-400 font-bold bg-red-500/10 border border-red-500/20 rounded p-2 animate-shake">
+        <p className="text-center text-sm text-red-400 font-bold bg-red-500/10 border border-red-500/20 rounded p-2">
           {guessMessage}
         </p>
       )}

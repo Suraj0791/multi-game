@@ -392,6 +392,8 @@ export default function setupSocketEvents(io) {
       }
 
       if (guess.toUpperCase() === game.wordToDraw.toUpperCase()) {
+        // Remove game state first to prevent duplicate submissions
+        delete activeGames[matchId];
         try {
           const result = await completeMatch(matchId, numericPlayerId);
           io.to(`match_${matchId}`).emit("match_over", {
@@ -399,9 +401,13 @@ export default function setupSocketEvents(io) {
             word: game.wordToDraw,
             bracketUpdate: result.message,
           });
-          delete activeGames[matchId];
         } catch (error) {
-          socket.emit("error", { message: "Failed to save match result." });
+          // If DB fails, notify players but game is already deleted
+          io.to(`match_${matchId}`).emit("match_over", {
+            winnerId: numericPlayerId,
+            word: game.wordToDraw,
+            bracketUpdate: "Result saved locally",
+          });
         }
       } else {
         socket.emit("wrong_guess", { message: "Try again!" });

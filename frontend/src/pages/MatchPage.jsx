@@ -41,7 +41,10 @@ export default function MatchPage() {
     enabled: !!matchId,
   });
 
-  if (isLoading) {
+  // Guard: wait until we have both match data and a valid userId
+  const hasValidUserId = userId && Number(userId) > 0;
+
+  if (isLoading || !hasValidUserId) {
     return (
       <div className="flex items-center justify-center py-20">
         <p className="text-muted-foreground">Loading match...</p>

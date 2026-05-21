@@ -19,25 +19,38 @@
 //   ON:    trivia:round_over → { correctAnswer }
 //   ON:    trivia:match_over → { winnerId, scores }
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Trophy, Clock, CheckCircle, XCircle } from 'lucide-react'
 import { toast } from 'sonner'
 
-export default function TriviaGame({ socket, matchId, player1Id, player2Id, currentUserId, isSpectator }) {
+export default function TriviaGame({ socket, matchId, currentUserId, isSpectator }) {
   // ============================================================
   // ALL STATE for the trivia game
   // ============================================================
   const [gameStatus, setGameStatus] = useState('waiting')
-  const [question, setQuestion] = useState(null)        // current question object
-  const [timeLeft, setTimeLeft] = useState(0)            // countdown seconds
-  const [selectedAnswer, setSelectedAnswer] = useState(null)  // which option clicked
-  const [feedback, setFeedback] = useState(null)         // correct/wrong result
-  const [scores, setScores] = useState({})               // { playerId: score }
-  const [finalResult, setFinalResult] = useState(null)   // end-of-game data
-  const [questionStart, setQuestionStart] = useState(0)  // timestamp for timeTakenMs
+  const [question, setQuestion] = useState(null)
+  const [timeLeft, setTimeLeft] = useState(0)
+  const [selectedAnswer, setSelectedAnswer] = useState(null)
+  const [feedback, setFeedback] = useState(null)
+  const [scores, setScores] = useState({})
+  const [finalResult, setFinalResult] = useState(null)
+  const [questionStart, setQuestionStart] = useState(0)
   const [countdown, setCountdown] = useState(3)
+
+  const userIdNum = Number(currentUserId);
+  const safeUserId = !isNaN(userIdNum) && userIdNum > 0 ? userIdNum : null;
+
+  // Refs for stable listener cleanup
+  const joinMatchRef = useRef(null);
+  const onStartedRef = useRef(null);
+  const onNewQuestionRef = useRef(null);
+  const onFeedbackRef = useRef(null);
+  const onScoreUpdateRef = useRef(null);
+  const onRoundOverRef = useRef(null);
+  const onMatchOverRef = useRef(null);
+  const onTriviaErrorRef = useRef(null);
 
   // Countdown timer for starting state
   useEffect(() => {
@@ -59,18 +72,14 @@ export default function TriviaGame({ socket, matchId, player1Id, player2Id, curr
   // SOCKET EVENT LISTENERS — set up on mount, clean up on unmount
   // ============================================================
   useEffect(() => {
-    if (!socket) return
+    if (!socket || !safeUserId) return
 
-    // LISTENER: Game is starting
     const onStarted = () => {
       setGameStatus('starting')
     }
 
-    // LISTENER: New question arrived
     const onNewQuestion = (data) => {
-      // Request fresh scores snapshot immediately
       socket.emit('trivia:request_scores', { matchId })
-
       setQuestion(data.question)
       setTimeLeft(data.timerSeconds)
       setSelectedAnswer(null)
@@ -79,18 +88,15 @@ export default function TriviaGame({ socket, matchId, player1Id, player2Id, curr
       setQuestionStart(Date.now())
     }
 
-    // LISTENER: My answer result
     const onFeedback = (data) => {
       setFeedback(data)
       setGameStatus('result')
     }
 
-    // LISTENER: Scores updated
     const onScoreUpdate = (data) => {
       setScores(data.scores)
     }
 
-    // LISTENER: Round is over (timeout — no one answered in time)
     const onRoundOver = (data) => {
       setFeedback(prev => {
         if (prev !== null) return prev;
@@ -99,7 +105,6 @@ export default function TriviaGame({ socket, matchId, player1Id, player2Id, curr
       setGameStatus('result')
     }
 
-    // LISTENER: Game finished
     const onMatchOver = (data) => {
       setFinalResult(data)
       setScores(data.scores)
@@ -110,7 +115,20 @@ export default function TriviaGame({ socket, matchId, player1Id, player2Id, curr
       toast.error(data.message || 'An error occurred');
     }
 
-    // REGISTER all listeners BEFORE emitting join
+    const joinMatch = () => {
+      socket.emit('trivia:join', { matchId, playerId: safeUserId })
+    }
+
+    // Store refs for cleanup
+    onStartedRef.current = onStarted;
+    onNewQuestionRef.current = onNewQuestion;
+    onFeedbackRef.current = onFeedback;
+    onScoreUpdateRef.current = onScoreUpdate;
+    onRoundOverRef.current = onRoundOver;
+    onMatchOverRef.current = onMatchOver;
+    onTriviaErrorRef.current = onTriviaError;
+    joinMatchRef.current = joinMatch;
+
     socket.on('trivia:started', onStarted)
     socket.on('trivia:new_question', onNewQuestion)
     socket.on('trivia:answer_feedback', onFeedback)
@@ -119,30 +137,24 @@ export default function TriviaGame({ socket, matchId, player1Id, player2Id, curr
     socket.on('trivia:match_over', onMatchOver)
     socket.on('trivia:error', onTriviaError)
 
-    const joinMatch = () => {
-      socket.emit('trivia:join', { matchId, playerId: Number(currentUserId) })
-    }
-
-    // Join immediately if already connected
     if (socket.connected) {
       joinMatch()
     }
 
-    // Re-join on connection/reconnection
     socket.on('connect', joinMatch)
 
-    // CLEANUP — remove all listeners when component unmounts
     return () => {
-      socket.off('connect', joinMatch)
-      socket.off('trivia:started', onStarted)
-      socket.off('trivia:new_question', onNewQuestion)
-      socket.off('trivia:answer_feedback', onFeedback)
-      socket.off('trivia:score_update', onScoreUpdate)
-      socket.off('trivia:round_over', onRoundOver)
-      socket.off('trivia:match_over', onMatchOver)
-      socket.off('trivia:error', onTriviaError)
+      const jm = joinMatchRef.current;
+      if (jm) socket.off('connect', jm);
+      socket.off('trivia:started', onStartedRef.current)
+      socket.off('trivia:new_question', onNewQuestionRef.current)
+      socket.off('trivia:answer_feedback', onFeedbackRef.current)
+      socket.off('trivia:score_update', onScoreUpdateRef.current)
+      socket.off('trivia:round_over', onRoundOverRef.current)
+      socket.off('trivia:match_over', onMatchOverRef.current)
+      socket.off('trivia:error', onTriviaErrorRef.current)
     }
-  }, [socket, matchId, currentUserId])
+  }, [socket, matchId, safeUserId])
 
   // ============================================================
   // TIMER — counts down every second

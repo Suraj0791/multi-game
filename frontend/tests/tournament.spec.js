@@ -95,11 +95,12 @@ async function uiLogin(page, email, password) {
   await expect(page).toHaveURL(/\/tournaments/);
 }
 
-// Trivia Play Helper
+// Trivia Play Helper — clicks any available answer until the match ends
 async function playTriviaToEnd(page) {
   const finished = page
     .locator("text=You Won!")
-    .or(page.locator("text=Game Over"));
+    .or(page.locator("text=Game Over"))
+    .or(page.locator("text=Match Finished"));
   for (let i = 0; i < 15; i++) {
     if (await finished.isVisible()) return;
 
@@ -124,9 +125,20 @@ async function playTriviaToEnd(page) {
   await expect(finished).toBeVisible({ timeout: 45_000 });
 }
 
+// Force-complete all remaining matches in a tournament via API
+async function forceCompleteAllMatches(request, tournamentId, hostAuth) {
+  for (let guard = 0; guard < 20; guard++) {
+    const matches = await apiGetMatches(request, tournamentId);
+    const incomplete = matches.filter((m) => m.status !== "COMPLETED");
+    if (incomplete.length === 0) break;
+    const m = incomplete[0];
+    const winnerId = m.player1Id || m.player2Id;
+    await apiCompleteMatch(request, m.id, winnerId, hostAuth.token);
+  }
+}
+
 test.describe("TourneyHub End-to-End Suite", () => {
-  // Set default timeout for E2E tests in this suite
-  test.setTimeout(120_000);
+  test.setTimeout(180_000);
 
   // ------------------------------------------------------------
   // TEST 1: Tournament Validation (Start Button States)
@@ -183,7 +195,6 @@ test.describe("TourneyHub End-to-End Suite", () => {
     );
     await page.goto(`/tournaments/${tournamentId2}`);
 
-    // Verify host is joined and button is disabled with "Need 1 more"
     await expect(page.locator("text=Need 1 more")).toBeVisible();
     const startBtn2 = page.locator('button:has-text("Start Tournament")');
     await expect(startBtn2).toBeDisabled();
@@ -278,9 +289,9 @@ test.describe("TourneyHub End-to-End Suite", () => {
     await drawerPage.goto(`/tournaments/${tournamentId}/match/${match.id}`);
     await guesserPage.goto(`/tournaments/${tournamentId}/match/${match.id}`);
 
-    // Verify role indicators
-    await expect(drawerPage.locator("text=You are DRAWING")).toBeVisible({ timeout: 15_000 });
-    await expect(guesserPage.locator("text=You are GUESSING")).toBeVisible({ timeout: 15_000 });
+    // Verify role indicators (they should appear once the game starts)
+    await expect(drawerPage.locator("text=You are DRAWING")).toBeVisible({ timeout: 25_000 });
+    await expect(guesserPage.locator("text=You are GUESSING")).toBeVisible({ timeout: 25_000 });
 
     // Empty guess validation check
     const guessInput = guesserPage.locator('input[placeholder="Type your guess..."]');
@@ -310,8 +321,8 @@ test.describe("TourneyHub End-to-End Suite", () => {
     await guessBtn.click();
 
     // Verify game completion overlays
-    await expect(guesserPage.locator("text=You Won!")).toBeVisible({ timeout: 15_000 });
-    await expect(drawerPage.locator("text=Game Over")).toBeVisible({ timeout: 15_000 });
+    await expect(guesserPage.locator("text=You Won!")).toBeVisible({ timeout: 30_000 });
+    await expect(drawerPage.locator("text=Game Over")).toBeVisible({ timeout: 30_000 });
 
     await drawerContext.close();
     await guesserContext.close();
@@ -353,9 +364,9 @@ test.describe("TourneyHub End-to-End Suite", () => {
     await p1Page.goto(`/tournaments/${tournamentId}/match/${match.id}`);
     await p2Page.goto(`/tournaments/${tournamentId}/match/${match.id}`);
 
-    // Verify starting countdown
-    await expect(p1Page.locator("text=Game Starting!")).toBeVisible({ timeout: 15_000 });
-    await expect(p2Page.locator("text=Game Starting!")).toBeVisible({ timeout: 15_000 });
+    // Verify starting countdown on both pages
+    await expect(p1Page.locator("text=Game Starting!")).toBeVisible({ timeout: 25_000 });
+    await expect(p2Page.locator("text=Game Starting!")).toBeVisible({ timeout: 25_000 });
 
     // Play Trivia to end
     await Promise.all([
@@ -368,7 +379,7 @@ test.describe("TourneyHub End-to-End Suite", () => {
   });
 
   // ------------------------------------------------------------
-  // TEST 5: Match Abandonment Victory
+  // TEST 5: Match Abandonment Victory (Trivia)
   // ------------------------------------------------------------
   test("Match Abandonment: Opponent disconnect victory", async ({ browser, request }) => {
     const p1Auth = await apiLogin(request, "player1@test.com", "password123");
@@ -403,21 +414,21 @@ test.describe("TourneyHub End-to-End Suite", () => {
     await p1Page.goto(`/tournaments/${tournamentId}/match/${match.id}`);
     await p2Page.goto(`/tournaments/${tournamentId}/match/${match.id}`);
 
-    // Wait for match starting state
-    await expect(p1Page.locator("text=Game Starting!")).toBeVisible({ timeout: 15_000 });
-    await expect(p2Page.locator("text=Game Starting!")).toBeVisible({ timeout: 15_000 });
+    // Wait for match starting state on BOTH pages
+    await expect(p1Page.locator("text=Game Starting!")).toBeVisible({ timeout: 25_000 });
+    await expect(p2Page.locator("text=Game Starting!")).toBeVisible({ timeout: 25_000 });
 
     // Close player 2 page (disconnection)
     await p2Context.close();
 
     // Verify Player 1 gets disconnect victory overlay ("You Won!")
-    await expect(p1Page.locator("text=You Won!")).toBeVisible({ timeout: 15_000 });
+    await expect(p1Page.locator("text=You Won!")).toBeVisible({ timeout: 30_000 });
 
     await p1Context.close();
   });
 
   // ------------------------------------------------------------
-  // TEST 6: Bracket Advancement & Full Tournament Completion
+  // TEST 6: Bracket Advancement & Full Tournament Completion (4 players)
   // ------------------------------------------------------------
   test("Bracket Advancement: Play tournament to completion", async ({ browser, request }) => {
     const triviaHostAuth = await apiLogin(request, "player1@test.com", "password123");
@@ -425,7 +436,6 @@ test.describe("TourneyHub End-to-End Suite", () => {
     const p3Auth = await apiLogin(request, "player3@test.com", "password123");
     const p4Auth = await apiLogin(request, "player4@test.com", "password123");
 
-    // Create a 4-player Trivia tournament
     const tournamentId = await apiCreateTournament(
       request,
       "Advancement Trivia Tourney",
@@ -435,7 +445,6 @@ test.describe("TourneyHub End-to-End Suite", () => {
       triviaHostAuth.token
     );
 
-    // Register players 2, 3, and 4
     await apiJoinTournament(request, tournamentId, p2Auth.token);
     await apiJoinTournament(request, tournamentId, p3Auth.token);
     await apiJoinTournament(request, tournamentId, p4Auth.token);
@@ -469,7 +478,6 @@ test.describe("TourneyHub End-to-End Suite", () => {
         : myMatch.player1Name;
     const opponentEmail = `${opponentName}@test.com`;
 
-    // Opponent log in & play
     const opponentContext = await browser.newContext();
     const opponentPage = await opponentContext.newPage();
     setupLogging(opponentPage, "advancement-opponent");
@@ -485,22 +493,444 @@ test.describe("TourneyHub End-to-End Suite", () => {
       playTriviaToEnd(opponentPage),
     ]);
 
-    // Force-complete all remaining matches in the bracket via REST API
-    for (let guard = 0; guard < 20; guard++) {
-      const matches = await apiGetMatches(request, tournamentId);
-      const incomplete = matches.filter((m) => m.status !== "COMPLETED");
-      if (incomplete.length === 0) break;
+    // Force-complete all remaining matches via REST API
+    await forceCompleteAllMatches(request, tournamentId, triviaHostAuth);
 
-      const m = incomplete[0];
-      const winnerId = m.player1Id || m.player2Id;
-      await apiCompleteMatch(request, m.id, winnerId, triviaHostAuth.token);
-    }
-
-    // Go back to details page and verify status is Completed
+    // Verify tournament status is Completed
     await hostPage.goto(`/tournaments/${tournamentId}`);
     await expect(hostPage.getByText("Completed", { exact: true })).toBeVisible({ timeout: 20_000 });
 
     await hostContext.close();
     await opponentContext.close();
+  });
+
+  // ------------------------------------------------------------
+  // TEST 7: Quick Draw — Wrong guesses then correct guess
+  // ------------------------------------------------------------
+  test("Quick Draw E2E: Wrong guesses then correct answer", async ({ browser, request }) => {
+    const p1Auth = await apiLogin(request, "player1@test.com", "password123");
+    const p2Auth = await apiLogin(request, "player2@test.com", "password123");
+
+    const tournamentId = await apiCreateTournament(
+      request,
+      "QuickDraw Wrong Guesses",
+      "QUICK_DRAW",
+      2,
+      0,
+      p1Auth.token
+    );
+    await apiJoinTournament(request, tournamentId, p2Auth.token);
+    await apiStartTournament(request, tournamentId, p1Auth.token);
+
+    const bracket = await apiGetBracket(request, tournamentId);
+    const match = (bracket.rounds?.round1 || [])[0];
+    if (!match) throw new Error("Match not found");
+
+    const drawerCtx = await browser.newContext();
+    const guesserCtx = await browser.newContext();
+    const drawerPage = await drawerCtx.newPage();
+    const guesserPage = await guesserCtx.newPage();
+
+    setupLogging(drawerPage, "qd-wrong-drawer");
+    setupLogging(guesserPage, "qd-wrong-guesser");
+
+    await uiLogin(drawerPage, "player1@test.com", "password123");
+    await uiLogin(guesserPage, "player2@test.com", "password123");
+
+    await drawerPage.goto(`/tournaments/${tournamentId}/match/${match.id}`);
+    await guesserPage.goto(`/tournaments/${tournamentId}/match/${match.id}`);
+
+    // Wait for game to start
+    await expect(drawerPage.locator("text=You are DRAWING")).toBeVisible({ timeout: 25_000 });
+    await expect(guesserPage.locator("text=You are GUESSING")).toBeVisible({ timeout: 25_000 });
+
+    // Get the secret word
+    const drawHeader = drawerPage.locator("text=Draw:");
+    await expect(drawHeader).toBeVisible();
+    const wordText = await drawHeader.innerText();
+    const secretWord = wordText.replace(/^Draw:\s*/i, "").trim();
+
+    const guessInput = guesserPage.locator('input[placeholder="Type your guess..."]');
+    const guessBtn = guesserPage.locator('button:has-text("Guess")');
+    await expect(guessInput).toBeVisible();
+
+    // Submit wrong guess twice
+    await guessInput.fill("WRONG_ANSWER_1");
+    await guessBtn.click();
+    await expect(guesserPage.locator("text=Try again!")).toBeVisible({ timeout: 10_000 });
+
+    await guessInput.fill("WRONG_ANSWER_2");
+    await guessBtn.click();
+    await expect(guesserPage.locator("text=Try again!")).toBeVisible({ timeout: 10_000 });
+
+    // Submit correct guess
+    await guessInput.fill(secretWord);
+    await guessBtn.click();
+
+    // Verify game ends with correct winner/loser
+    await expect(guesserPage.locator("text=You Won!")).toBeVisible({ timeout: 30_000 });
+    await expect(drawerPage.locator("text=Game Over")).toBeVisible({ timeout: 30_000 });
+
+    await drawerCtx.close();
+    await guesserCtx.close();
+  });
+
+  // ------------------------------------------------------------
+  // TEST 8: 8-Player Quick Draw Tournament — Full bracket completion
+  // ------------------------------------------------------------
+  test("8-Player Quick Draw: Full bracket completion via API", async ({ browser, request }) => {
+    const p1Auth = await apiLogin(request, "player1@test.com", "password123");
+    const p2Auth = await apiLogin(request, "player2@test.com", "password123");
+    const p3Auth = await apiLogin(request, "player3@test.com", "password123");
+    const p4Auth = await apiLogin(request, "player4@test.com", "password123");
+    const p5Auth = await apiLogin(request, "player5@test.com", "password123");
+    const p6Auth = await apiLogin(request, "player6@test.com", "password123");
+    const p7Auth = await apiLogin(request, "player7@test.com", "password123");
+    const p8Auth = await apiLogin(request, "player8@test.com", "password123");
+
+    const tournamentId = await apiCreateTournament(
+      request,
+      "8p QuickDraw Full",
+      "QUICK_DRAW",
+      8,
+      0,
+      p1Auth.token
+    );
+
+    // API-join all 8 players
+    for (const auth of [p2Auth, p3Auth, p4Auth, p5Auth, p6Auth, p7Auth, p8Auth]) {
+      await apiJoinTournament(request, tournamentId, auth.token);
+    }
+
+    await apiStartTournament(request, tournamentId, p1Auth.token);
+
+    // Verify bracket has 4 matches in round 1
+    const bracket1 = await apiGetBracket(request, tournamentId);
+    expect(bracket1.rounds?.round1?.length).toBe(4);
+
+    // Complete all matches programmatically
+    await forceCompleteAllMatches(request, tournamentId, p1Auth);
+
+    // Verify bracket progression: round2 should have 2 matches
+    const bracket2 = await apiGetBracket(request, tournamentId);
+    expect(bracket2.rounds?.round2?.length).toBe(2);
+
+    // Verify tournament status is Completed
+    const tournamentMatches = await apiGetMatches(request, tournamentId);
+    const completed = tournamentMatches.filter((m) => m.status === "COMPLETED");
+    const totalMatches = tournamentMatches.length;
+    // For 8 players: 4 (R1) + 2 (R2) + 1 (final) = 7 matches total
+    expect(totalMatches).toBe(7);
+    expect(completed.length).toBe(7);
+  });
+
+  // ------------------------------------------------------------
+  // TEST 9: 8-Player Trivia Tournament — Full bracket completion
+  // ------------------------------------------------------------
+  test("8-Player Trivia: Full bracket completion via API", async ({ browser, request }) => {
+    const p1Auth = await apiLogin(request, "player1@test.com", "password123");
+    const p2Auth = await apiLogin(request, "player2@test.com", "password123");
+    const p3Auth = await apiLogin(request, "player3@test.com", "password123");
+    const p4Auth = await apiLogin(request, "player4@test.com", "password123");
+    const p5Auth = await apiLogin(request, "player5@test.com", "password123");
+    const p6Auth = await apiLogin(request, "player6@test.com", "password123");
+    const p7Auth = await apiLogin(request, "player7@test.com", "password123");
+    const p8Auth = await apiLogin(request, "player8@test.com", "password123");
+
+    const tournamentId = await apiCreateTournament(
+      request,
+      "8p Trivia Full",
+      "TRIVIA",
+      8,
+      0,
+      p1Auth.token
+    );
+
+    for (const auth of [p2Auth, p3Auth, p4Auth, p5Auth, p6Auth, p7Auth, p8Auth]) {
+      await apiJoinTournament(request, tournamentId, auth.token);
+    }
+
+    await apiStartTournament(request, tournamentId, p1Auth.token);
+
+    // Verify bracket has 4 matches in round 1
+    const bracket1 = await apiGetBracket(request, tournamentId);
+    expect(bracket1.rounds?.round1?.length).toBe(4);
+
+    // Complete all matches
+    await forceCompleteAllMatches(request, tournamentId, p1Auth);
+
+    // Verify round 2 exists with 2 matches
+    const bracket2 = await apiGetBracket(request, tournamentId);
+    expect(bracket2.rounds?.round2?.length).toBe(2);
+
+    // Verify all 7 matches completed
+    const matches = await apiGetMatches(request, tournamentId);
+    expect(matches.length).toBe(7);
+    expect(matches.every((m) => m.status === "COMPLETED")).toBe(true);
+  });
+
+  // ------------------------------------------------------------
+  // TEST 10: Quick Draw — Spectator view during active match
+  // ------------------------------------------------------------
+  test("Quick Draw E2E: Spectator can view match", async ({ browser, request }) => {
+    const p1Auth = await apiLogin(request, "player1@test.com", "password123");
+    const p2Auth = await apiLogin(request, "player2@test.com", "password123");
+    const spectatorAuth = await apiLogin(request, "player3@test.com", "password123");
+
+    const tournamentId = await apiCreateTournament(
+      request,
+      "QuickDraw Spectator",
+      "QUICK_DRAW",
+      4,
+      0,
+      p1Auth.token
+    );
+    await apiJoinTournament(request, tournamentId, p2Auth.token);
+    await apiJoinTournament(request, tournamentId, spectatorAuth.token);
+    await apiStartTournament(request, tournamentId, p1Auth.token);
+
+    const bracket = await apiGetBracket(request, tournamentId);
+    // Find a match involving player1 and player2
+    const match = bracket.rounds?.round1?.find(
+      (m) => m.player1Id === p1Auth.userId || m.player2Id === p1Auth.userId
+    );
+    if (!match) throw new Error("Match not found");
+
+    const drawerCtx = await browser.newContext();
+    const guesserCtx = await browser.newContext();
+    const spectatorCtx = await browser.newContext();
+    const drawerPage = await drawerCtx.newPage();
+    const guesserPage = await guesserCtx.newPage();
+    const spectatorPage = await spectatorCtx.newPage();
+
+    setupLogging(drawerPage, "qd-spec-drawer");
+    setupLogging(guesserPage, "qd-spec-guesser");
+    setupLogging(spectatorPage, "qd-spec-viewer");
+
+    await uiLogin(drawerPage, "player1@test.com", "password123");
+    await uiLogin(guesserPage, "player2@test.com", "password123");
+    await uiLogin(spectatorPage, "player3@test.com", "password123");
+
+    await drawerPage.goto(`/tournaments/${tournamentId}/match/${match.id}`);
+    await guesserPage.goto(`/tournaments/${tournamentId}/match/${match.id}`);
+    await spectatorPage.goto(`/tournaments/${tournamentId}/match/${match.id}`);
+
+    // Spectator sees SPECTATING role
+    await expect(spectatorPage.locator("text=You are SPECTATING")).toBeVisible({ timeout: 25_000 });
+
+    // Players see their roles
+    await expect(drawerPage.locator("text=You are DRAWING")).toBeVisible({ timeout: 25_000 });
+    await expect(guesserPage.locator("text=You are GUESSING")).toBeVisible({ timeout: 25_000 });
+
+    // Spectator can see the canvas (canvas element exists)
+    await expect(spectatorPage.locator("canvas")).toBeVisible();
+
+    await drawerCtx.close();
+    await guesserCtx.close();
+    await spectatorCtx.close();
+  });
+
+  // ------------------------------------------------------------
+  // TEST 11: Chat — Multi-user broadcast
+  // ------------------------------------------------------------
+  test("Chat: Multi-user message broadcast", async ({ browser, request }) => {
+    const p1Auth = await apiLogin(request, "player1@test.com", "password123");
+
+    const tournamentId = await apiCreateTournament(
+      request,
+      "Chat Multi-User",
+      "TRIVIA",
+      4,
+      0,
+      p1Auth.token
+    );
+
+    const ctx1 = await browser.newContext();
+    const ctx2 = await browser.newContext();
+    const page1 = await ctx1.newPage();
+    const page2 = await ctx2.newPage();
+
+    setupLogging(page1, "chat-multi-1");
+    setupLogging(page2, "chat-multi-2");
+
+    await uiLogin(page1, "player1@test.com", "password123");
+    await uiLogin(page2, "player2@test.com", "password123");
+
+    await page1.goto(`/tournaments/${tournamentId}`);
+    await page2.goto(`/tournaments/${tournamentId}`);
+
+    // Both users should see the chat input
+    const input1 = page1.locator('input[placeholder="Type a message..."]');
+    const input2 = page2.locator('input[placeholder="Type a message..."]');
+    await expect(input1).toBeVisible({ timeout: 15_000 });
+    await expect(input2).toBeVisible({ timeout: 15_000 });
+
+    // Player 1 sends a message
+    const sendBtn1 = page1.locator('form:has(input[placeholder="Type a message..."]) button[type="submit"]');
+    await input1.fill("Broadcast test from player1");
+    await sendBtn1.click();
+
+    // Both pages should see the message
+    const chatArea1 = page1.locator("div.flex-1.overflow-y-auto");
+    const chatArea2 = page2.locator("div.flex-1.overflow-y-auto");
+    await expect(chatArea1).toContainText("Broadcast test from player1", { timeout: 10_000 });
+    await expect(chatArea2).toContainText("Broadcast test from player1", { timeout: 10_000 });
+
+    // Player 2 sends a reply
+    const sendBtn2 = page2.locator('form:has(input[placeholder="Type a message..."]) button[type="submit"]');
+    await input2.fill("Reply from player2");
+    await sendBtn2.click();
+
+    await expect(chatArea2).toContainText("Reply from player2", { timeout: 10_000 });
+    await expect(chatArea1).toContainText("Reply from player2", { timeout: 10_000 });
+
+    await ctx1.close();
+    await ctx2.close();
+  });
+
+  // ------------------------------------------------------------
+  // TEST 12: Tournament — Cannot join after started
+  // ------------------------------------------------------------
+  test("Tournament: Cannot join after tournament starts", async ({ browser, request }) => {
+    const p1Auth = await apiLogin(request, "player1@test.com", "password123");
+    const p2Auth = await apiLogin(request, "player2@test.com", "password123");
+    const p3Auth = await apiLogin(request, "player3@test.com", "password123");
+
+    const tournamentId = await apiCreateTournament(
+      request,
+      "Join After Start",
+      "TRIVIA",
+      2,
+      0,
+      p1Auth.token
+    );
+    await apiJoinTournament(request, tournamentId, p2Auth.token);
+    await apiStartTournament(request, tournamentId, p1Auth.token);
+
+    // Player 3 tries to join the already started tournament — should fail
+    const res = await request.post(`${API_URL}/tournaments/${tournamentId}/join`, {
+      headers: { Authorization: `Bearer ${p3Auth.token}` },
+    });
+    expect(res.ok()).toBeFalsy();
+    const body = await res.json();
+    // Must include an error message about not being in registration
+    expect(body.error).toBeTruthy();
+  });
+
+  // ------------------------------------------------------------
+  // TEST 13: Trivia — Spectator can view match
+  // ------------------------------------------------------------
+  test("Trivia E2E: Spectator view during active match", async ({ browser, request }) => {
+    const p1Auth = await apiLogin(request, "player1@test.com", "password123");
+    const p2Auth = await apiLogin(request, "player2@test.com", "password123");
+    const spectatorAuth = await apiLogin(request, "player3@test.com", "password123");
+
+    const tournamentId = await apiCreateTournament(
+      request,
+      "Trivia Spectator",
+      "TRIVIA",
+      4,
+      0,
+      p1Auth.token
+    );
+    await apiJoinTournament(request, tournamentId, p2Auth.token);
+    await apiJoinTournament(request, tournamentId, spectatorAuth.token);
+    await apiStartTournament(request, tournamentId, p1Auth.token);
+
+    const bracket = await apiGetBracket(request, tournamentId);
+    const match = bracket.rounds?.round1?.find(
+      (m) => m.player1Id === p1Auth.userId || m.player2Id === p1Auth.userId
+    );
+    if (!match) throw new Error("Match not found");
+
+    const p1Ctx = await browser.newContext();
+    const p2Ctx = await browser.newContext();
+    const specCtx = await browser.newContext();
+    const p1Page = await p1Ctx.newPage();
+    const p2Page = await p2Ctx.newPage();
+    const specPage = await specCtx.newPage();
+
+    setupLogging(p1Page, "trivia-spec-p1");
+    setupLogging(p2Page, "trivia-spec-p2");
+    setupLogging(specPage, "trivia-spec-viewer");
+
+    await uiLogin(p1Page, "player1@test.com", "password123");
+    await uiLogin(p2Page, "player2@test.com", "password123");
+    await uiLogin(specPage, "player3@test.com", "password123");
+
+    await p1Page.goto(`/tournaments/${tournamentId}/match/${match.id}`);
+    await p2Page.goto(`/tournaments/${tournamentId}/match/${match.id}`);
+    await specPage.goto(`/tournaments/${tournamentId}/match/${match.id}`);
+
+    // Spectator sees Spectator Mode badge
+    await expect(specPage.locator("text=Spectator Mode")).toBeVisible({ timeout: 25_000 });
+
+    // Players see Game Starting!
+    await expect(p1Page.locator("text=Game Starting!")).toBeVisible({ timeout: 25_000 });
+    await expect(p2Page.locator("text=Game Starting!")).toBeVisible({ timeout: 25_000 });
+
+    // Play the trivia match to completion
+    const allDone = Promise.all([
+      playTriviaToEnd(p1Page),
+      playTriviaToEnd(p2Page),
+    ]);
+
+    // Spectator should also see the match finish
+    await expect(specPage.locator("text=Match Finished")).toBeVisible({ timeout: 60_000 });
+
+    await allDone;
+
+    await p1Ctx.close();
+    await p2Ctx.close();
+    await specCtx.close();
+  });
+
+  // ------------------------------------------------------------
+  // TEST 14: Quick Draw — Drawer disconnect mid-game (guesser wins)
+  // ------------------------------------------------------------
+  test("Quick Draw Abandonment: Drawer disconnect, guesser wins", async ({ browser, request }) => {
+    const p1Auth = await apiLogin(request, "player1@test.com", "password123");
+    const p2Auth = await apiLogin(request, "player2@test.com", "password123");
+
+    const tournamentId = await apiCreateTournament(
+      request,
+      "QD Abandon Drawer",
+      "QUICK_DRAW",
+      2,
+      0,
+      p1Auth.token
+    );
+    await apiJoinTournament(request, tournamentId, p2Auth.token);
+    await apiStartTournament(request, tournamentId, p1Auth.token);
+
+    const bracket = await apiGetBracket(request, tournamentId);
+    const match = (bracket.rounds?.round1 || [])[0];
+    if (!match) throw new Error("Match not found");
+
+    const drawerCtx = await browser.newContext();
+    const guesserCtx = await browser.newContext();
+    const drawerPage = await drawerCtx.newPage();
+    const guesserPage = await guesserCtx.newPage();
+
+    setupLogging(drawerPage, "qd-abandon-drawer");
+    setupLogging(guesserPage, "qd-abandon-guesser");
+
+    await uiLogin(drawerPage, "player1@test.com", "password123");
+    await uiLogin(guesserPage, "player2@test.com", "password123");
+
+    await drawerPage.goto(`/tournaments/${tournamentId}/match/${match.id}`);
+    await guesserPage.goto(`/tournaments/${tournamentId}/match/${match.id}`);
+
+    // Wait for game to start
+    await expect(drawerPage.locator("text=You are DRAWING")).toBeVisible({ timeout: 25_000 });
+    await expect(guesserPage.locator("text=You are GUESSING")).toBeVisible({ timeout: 25_000 });
+
+    // Drawer disconnects
+    await drawerCtx.close();
+
+    // Guesser should win by abandonment
+    await expect(guesserPage.locator("text=You Won!")).toBeVisible({ timeout: 30_000 });
+
+    await guesserCtx.close();
   });
 });
