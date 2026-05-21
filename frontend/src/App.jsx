@@ -32,6 +32,7 @@ import ErrorBoundary from '@/components/layout/ErrorBoundary'
 import { Toaster } from 'sonner'
 
 // Pages
+import LandingPage from '@/pages/LandingPage'
 import LoginPage from '@/pages/LoginPage'
 import RegisterPage from '@/pages/RegisterPage'
 import TournamentsPage from '@/pages/TournamentsPage'
@@ -55,6 +56,8 @@ function App() {
           <Routes>
 
             {/* ====== PUBLIC ROUTES (no login needed) ====== */}
+            {/* Landing page is the root — no auth needed */}
+            <Route path="/" element={<LandingPage />} />
             {/* If user is already logged in, PublicRoute redirects to /tournaments */}
             <Route path="/login" element={
               <PublicRoute>

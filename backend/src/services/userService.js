@@ -60,6 +60,24 @@ export async function loginUser(email, password) {
   return { userId: user.id, token };
 }
 
+export async function guestLogin() {
+  const randomSuffix = Math.random().toString(36).substring(2, 6);
+  const username = `Player_${randomSuffix}`;
+  const email = `guest_${randomSuffix}_${Date.now()}@tourneyhub.demo`;
+  const randomPassword = Math.random().toString(36).substring(2, 10);
+  const hashedPassword = await bcrypt.hash(randomPassword, 10);
+
+  const user = await createUser(username, email, hashedPassword);
+
+  const token = jwt.sign(
+    { userId: user.id },
+    process.env.JWT_SECRET,
+    { expiresIn: '7d' }
+  );
+
+  return { userId: user.id, token, username: user.username };
+}
+
 import { getUserStats } from '../models/User.js';
 import { getRankBadge, getAchievementBadges } from '../rating/badges.js';
 

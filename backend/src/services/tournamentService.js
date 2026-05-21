@@ -1,3 +1,4 @@
+import bcrypt from 'bcryptjs';
 import {
   createTournament as insertTournament,
   getTournaments as fetchTournaments,
@@ -6,6 +7,7 @@ import {
 } from '../models/Tournament.js';
 import { getPlayersByTournament, addPlayer, updatePlayerPaymentStatus } from '../models/TournamentPlayer.js';
 import { createMatch, getMatchesByTournament } from '../models/Match.js';
+import { createUser, findByEmail } from '../models/User.js';
 
 export async function createTournament(name, game_type, max_players, entry_fee, host_id) {
   // Validate required fields (entry_fee can be 0, so we don't check it)
@@ -177,6 +179,54 @@ export async function getTournamentMatches(id) {
 }
 
 // Group matches by round for the bracket UI
+const BOT_CREDENTIALS = [
+  { username: 'Bot_Alice', email: 'bot_alice@tourneyhub.demo' },
+  { username: 'Bot_Bob', email: 'bot_bob@tourneyhub.demo' },
+  { username: 'Bot_Charlie', email: 'bot_charlie@tourneyhub.demo' },
+];
+
+async function getOrCreateBotUser({ username, email }) {
+  const existing = await findByEmail(email);
+  if (existing) return existing;
+  const hashedPassword = await bcrypt.hash('demo_bot_pass', 10);
+  return await createUser(username, email, hashedPassword);
+}
+
+export async function createDemoTournament(hostId) {
+  const name = 'Demo Tournament';
+  const gameType = Math.random() > 0.5 ? 'TRIVIA' : 'QUICK_DRAW';
+  const maxPlayers = 4;
+  const entryFee = 0;
+
+  const tournament = await insertTournament(name, gameType, maxPlayers, entryFee, hostId);
+
+  await addPlayer(tournament.id, hostId);
+  await updatePlayerPaymentStatus(tournament.id, hostId, 'COMPLETED');
+
+  const bots = await Promise.all(BOT_CREDENTIALS.map(getOrCreateBotUser));
+  for (const bot of bots) {
+    await addPlayer(tournament.id, bot.id);
+    await updatePlayerPaymentStatus(tournament.id, bot.id, 'COMPLETED');
+  }
+
+  const players = await getPlayersByTournament(tournament.id);
+  const shuffledPlayers = players.sort(() => Math.random() - 0.5);
+
+  let matchNumber = 1;
+  for (let i = 0; i < shuffledPlayers.length; i += 2) {
+    const p1 = shuffledPlayers[i];
+    const p2 = shuffledPlayers[i + 1];
+    if (p1 && p2) {
+      await createMatch(tournament.id, p1.player_id, p2.player_id, 1, matchNumber);
+      matchNumber++;
+    }
+  }
+
+  await updateTournamentStatus(tournament.id, 'IN_PROGRESS');
+
+  return { tournamentId: tournament.id, status: 'IN_PROGRESS', gameType };
+}
+
 export async function getTournamentBracket(id) {
   const matches = await getTournamentMatches(id);
 

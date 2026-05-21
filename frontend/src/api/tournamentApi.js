@@ -74,6 +74,12 @@ export async function getChatHistory(tournamentId) {
   return response.data;
 }
 
+// POST /tournaments/demo → create demo tournament with bots
+export async function createDemoTournament() {
+  const response = await api.post('/tournaments/demo');
+  return response.data;
+}
+
 // POST /tournaments/:id/pay → create a payment order
 export async function createPaymentOrder(tournamentId) {
   const response = await api.post(`/tournaments/${tournamentId}/pay`);

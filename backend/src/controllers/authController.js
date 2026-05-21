@@ -1,4 +1,4 @@
-import { registerUser ,loginUser} from '../services/userService.js';
+import { registerUser ,loginUser, guestLogin as guestLoginService } from '../services/userService.js';
 
 export async function register(req, res) {
   try {
@@ -18,6 +18,20 @@ export async function register(req, res) {
   }
 }
 
+
+export async function guestLogin(req, res) {
+  try {
+    const result = await guestLoginService();
+    res.status(201).json({
+      userId: result.userId,
+      token: result.token,
+      username: result.username,
+      message: 'Guest login successful'
+    });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+}
 
 export async function login(req, res) {
   try {

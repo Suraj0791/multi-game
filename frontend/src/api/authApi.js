@@ -16,3 +16,9 @@ export async function loginUser(email, password) {
   return response.data
 }
 
+// POST /auth/guest → { userId, token, username, message }
+export async function guestLogin() {
+  const response = await api.post('/auth/guest')
+  return response.data
+}
+
