@@ -56,7 +56,7 @@ export default function CreateTournamentPage() {
       })
 
       // Redirect to the newly created tournament's detail page
-      navigate(`/tournaments/${response.tournamentId}`)
+      navigate(`/tournaments/${response.tournamentId}`, { replace: true })
     } catch (err) {
       setError(err.response?.data?.error || err.message || 'Failed to create tournament.')
     }

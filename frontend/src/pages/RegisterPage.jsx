@@ -32,7 +32,7 @@ export default function RegisterPage() {
       // After register, user is auto-logged in (backend returns a token)
       login(response.token, response.userId)
 
-      navigate('/tournaments')
+      navigate('/tournaments', { replace: true })
     } catch (err) {
       setError(err.response?.data?.error || 'Registration failed. Try again.')
     }

@@ -54,7 +54,7 @@ export default function LoginPage() {
       login(response.token, response.userId)
 
       // STEP C: Redirect to the app
-      navigate('/tournaments')
+      navigate('/tournaments', { replace: true })
     } catch (err) {
       // Show the backend error message (or a generic one)
       setError(err.response?.data?.error || 'Login failed. Try again.')
