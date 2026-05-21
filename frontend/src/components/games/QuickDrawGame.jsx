@@ -117,7 +117,7 @@ export default function QuickDrawGame({
       const canvas = canvasRef.current;
       if (!canvas) return;
       const ctx = canvas.getContext("2d");
-      
+
       // Clear canvas first
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
@@ -265,9 +265,8 @@ export default function QuickDrawGame({
           <Card className="max-w-lg w-full border-neutral-800 bg-neutral-900 shadow-2xl">
             <CardContent className="p-8 text-center space-y-4">
               <Trophy
-                className={`h-12 w-12 mx-auto mb-2 ${
-                  finalResult.winnerId === Number(currentUserId) && !isSpectator ? "text-amber-500 animate-pulse" : "text-neutral-600"
-                }`}
+                className={`h-12 w-12 mx-auto mb-2 ${finalResult.winnerId === Number(currentUserId) && !isSpectator ? "text-amber-500 animate-pulse" : "text-neutral-600"
+                  }`}
               />
               <h2 className="text-2xl font-black text-neutral-100 tracking-tight">
                 {isSpectator ? "Match Finished" : (finalResult.winnerId === Number(currentUserId) ? "Victory!" : "Defeat")}
@@ -315,9 +314,8 @@ export default function QuickDrawGame({
             onMouseMove={handleMouseMove}
             onMouseUp={handleMouseUp}
             onMouseLeave={handleMouseUp}
-            className={`w-full border border-neutral-850 rounded bg-neutral-950 shadow-inner ${
-              isDrawer && !isSpectator ? "cursor-crosshair" : "cursor-not-allowed"
-            }`}
+            className={`w-full border border-neutral-850 rounded bg-neutral-950 shadow-inner ${isDrawer && !isSpectator ? "cursor-crosshair" : "cursor-not-allowed"
+              }`}
           />
         </CardContent>
       </Card>
