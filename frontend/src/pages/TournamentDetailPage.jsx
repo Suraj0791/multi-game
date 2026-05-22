@@ -217,6 +217,7 @@ export default function TournamentDetailPage() {
               bracket={bracket}
               tournamentId={id}
               currentUserId={userId}
+              maxPlayers={tournament.maxPlayers}
             />
           )}
         </div>
