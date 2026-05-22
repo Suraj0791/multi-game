@@ -1,41 +1,34 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Trophy, Swords, Brain, Users, ArrowRight, Sparkles, LayoutDashboard } from 'lucide-react'
+import { Trophy, Swords, Brain, Users, ArrowRight, Sparkles, Copy, Check } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { guestLogin } from '@/api/authApi'
-import { createDemoTournament, createVsBotMatch, createQuickMatch } from '@/api/tournamentApi'
+import { createQuickMatch } from '@/api/tournamentApi'
 import useAuthStore from '@/stores/authStore'
 
 const FEATURES = [
   {
     icon: <Swords className="h-6 w-6" />,
-    title: 'Quick Draw',
-    desc: 'Race to guess what your opponent is drawing in real-time. Fast-paced fun with a live canvas.',
+    title: 'Quick Draw Canvas',
+    desc: 'Race to guess what your opponent is drawing in real-time. Fast-paced fun with a live syncing canvas.',
     gradient: 'from-amber-500/20 to-orange-500/20',
     accent: 'text-amber-400',
   },
   {
     icon: <Brain className="h-6 w-6" />,
-    title: 'Trivia Battle',
-    desc: 'Test your knowledge across multiple categories. Answer fast, earn points, climb the ranks.',
+    title: 'Trivia Showdown',
+    desc: 'Test your knowledge across multiple categories. Answer fast, earn points, climb the live leaderboards.',
     gradient: 'from-emerald-500/20 to-teal-500/20',
     accent: 'text-emerald-400',
   },
   {
     icon: <Trophy className="h-6 w-6" />,
-    title: 'Tournaments',
-    desc: 'Create or join 4-8 player brackets. Win matches, earn ELO, unlock achievement badges.',
+    title: 'Live Tournaments',
+    desc: 'Create or join 2-player quick matches and sync gameplay instantly between windows.',
     gradient: 'from-purple-500/20 to-pink-500/20',
     accent: 'text-purple-400',
   },
-]
-
-const BRACKET_PREVIEW = [
-  { name: 'You', winner: true, round: 1 },
-  { name: 'Bot_Alice', winner: false, round: 1 },
-  { name: 'Bot_Bob', winner: true, round: 1 },
-  { name: 'Bot_Charlie', winner: false, round: 1 },
 ]
 
 export default function LandingPage() {
@@ -44,6 +37,7 @@ export default function LandingPage() {
   const token = useAuthStore((state) => state.token)
   const userId = useAuthStore((state) => state.userId)
   const [loading, setLoading] = useState(null)
+  const [copiedStep, setCopiedStep] = useState(false)
 
   const handleGuestLogin = async () => {
     setLoading('guest')
@@ -56,37 +50,8 @@ export default function LandingPage() {
     }
   }
 
-  const handleDemo = async () => {
-    setLoading('demo')
-    try {
-      if (!token) {
-        const res = await guestLogin()
-        login(res.token, res.userId)
-      }
-      const demo = await createDemoTournament()
-      // FIX: Take them directly to the active match!
-      navigate(`/tournaments/${demo.tournamentId}/match/${demo.firstMatchId}`, { replace: true })
-    } catch {
-      setLoading(null)
-    }
-  }
-
-  const handleVsBot = async (gameType) => {
-    setLoading('vsbot')
-    try {
-      if (!token) {
-        const res = await guestLogin()
-        login(res.token, res.userId)
-      }
-      const match = await createVsBotMatch(gameType)
-      navigate(`/tournaments/${match.tournamentId}/match/${match.matchId}`, { replace: true })
-    } catch {
-      setLoading(null)
-    }
-  }
-
   const handleQuickMatch = async (gameType) => {
-    setLoading('quick')
+    setLoading(gameType)
     try {
       const data = await createQuickMatch(gameType)
       login(data.token, data.userId)
@@ -97,24 +62,38 @@ export default function LandingPage() {
     }
   }
 
+  const handleCopyLink = async () => {
+    try {
+      const sandboxUrl = window.location.origin
+      await navigator.clipboard.writeText(sandboxUrl)
+      setCopiedStep(true)
+      setTimeout(() => setCopiedStep(false), 2000)
+    } catch (err) {
+      console.error('Failed to copy: ', err)
+    }
+  }
+
   return (
-    <div className="min-h-screen bg-background">
-      <nav className="border-b border-border bg-surface">
-        <div className="max-w-6xl mx-auto px-4 h-14 flex items-center justify-between">
+    <div className="min-h-screen bg-background text-foreground selection:bg-amber-500/30 selection:text-amber-200">
+      {/* Navigation */}
+      <nav className="border-b border-neutral-800 bg-neutral-950/80 backdrop-blur-md sticky top-0 z-50">
+        <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Trophy className="h-5 w-5 text-primary" />
-            <span className="font-bold text-foreground text-lg">TourneyHub</span>
+            <div className="p-2 rounded-lg bg-amber-500/10 text-amber-400">
+              <Trophy className="h-5 w-5" />
+            </div>
+            <span className="font-extrabold text-foreground text-xl tracking-tight">TourneyHub</span>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-4">
             {token ? (
               <>
-                <Button variant="ghost" size="sm" onClick={() => navigate('/tournaments')}>
-                  Tournaments
+                <Button variant="ghost" size="sm" onClick={() => navigate('/tournaments')} className="hover:text-amber-400 transition-colors">
+                  Dashboard
                 </Button>
-                <Button variant="ghost" size="sm" onClick={() => navigate(`/profile/${userId}`)}>
+                <Button variant="ghost" size="sm" onClick={() => navigate(`/profile/${userId}`)} className="hover:text-amber-400 transition-colors">
                   Profile
                 </Button>
-                <Button size="sm" onClick={() => {
+                <Button variant="outline" size="sm" className="border-neutral-800 hover:bg-neutral-900" onClick={() => {
                   localStorage.removeItem('token')
                   localStorage.removeItem('userId')
                   window.location.reload()
@@ -124,10 +103,10 @@ export default function LandingPage() {
               </>
             ) : (
               <>
-                <Button variant="ghost" size="sm" onClick={() => navigate('/login')}>
+                <Button variant="ghost" size="sm" onClick={() => navigate('/login')} className="hover:text-amber-400 transition-colors">
                   Sign in
                 </Button>
-                <Button size="sm" onClick={() => navigate('/register')}>
+                <Button size="sm" className="bg-amber-500 hover:bg-amber-600 text-neutral-950 font-bold" onClick={() => navigate('/register')}>
                   Get Started
                 </Button>
               </>
@@ -136,170 +115,174 @@ export default function LandingPage() {
         </div>
       </nav>
 
-      <section className="relative overflow-hidden">
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-primary/10 via-transparent to-transparent pointer-events-none" />
-        <div className="max-w-5xl mx-auto px-4 pt-20 pb-16 text-center relative">
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-primary/10 text-primary text-sm mb-6">
+      {/* Hero / WebSocket Sandbox Section */}
+      <section className="relative overflow-hidden pt-20 pb-16 md:pt-28 md:pb-24">
+        {/* Glow Effects */}
+        <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 -z-10 h-[400px] w-[600px] rounded-full bg-amber-500/5 blur-[120px] pointer-events-none" />
+        <div className="absolute top-10 right-10 -z-10 h-64 w-64 rounded-full bg-orange-500/5 blur-3xl pointer-events-none" />
+
+        <div className="max-w-5xl mx-auto px-4 text-center relative">
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs font-semibold mb-6 uppercase tracking-wider animate-pulse">
             <Sparkles className="h-3.5 w-3.5" />
-            Real-time multiplayer platform
+            Recruiter Testing Sandbox
           </div>
 
-          <h1 className="text-4xl md:text-6xl font-bold tracking-tight mb-4">
-            Compete in{' '}
-            <span className="bg-gradient-to-r from-amber-400 to-orange-500 bg-clip-text text-transparent">
-              Real-Time
+          <h1 className="text-4xl md:text-6xl font-extrabold tracking-tight mb-6 leading-tight">
+            Test Real-Time{' '}
+            <span className="bg-gradient-to-r from-amber-400 via-orange-400 to-amber-500 bg-clip-text text-transparent">
+              WebSockets
             </span>{' '}
-            Tournaments
+            Side-by-Side
           </h1>
 
-          <p className="text-lg text-muted-foreground max-w-xl mx-auto mb-8">
-            Play Quick Draw and Trivia against real opponents in live brackets.
-            Create tournaments, climb the leaderboard, and earn badges.
+          <p className="text-lg md:text-xl text-neutral-400 max-w-2xl mx-auto mb-10 leading-relaxed">
+            Skip faking matches with bots. Experience genuine real-time synchronization by opening two browser tabs and playing against yourself in a fast lobby match.
           </p>
 
-          <div className="flex items-center justify-center gap-3 flex-wrap">
-            {token ? (
-              <Button
-                size="lg"
-                className="gap-2 text-base h-12 px-6"
-                onClick={() => navigate('/tournaments')}
-              >
-                Go to Tournaments
-                <LayoutDashboard className="h-4 w-4" />
-              </Button>
-            ) : (
-              <Button
-                size="lg"
-                className="gap-2 text-base h-12 px-6"
-                onClick={handleGuestLogin}
-                disabled={loading !== null}
-              >
-                {loading === 'guest' ? 'Joining...' : 'Try as Guest (No Sign-up)'}
-                <ArrowRight className="h-4 w-4" />
-              </Button>
-            )}
-            <Button
-              size="lg"
-              variant="secondary"
-              className="gap-2 text-base h-12 px-6"
-              onClick={handleDemo}
-              disabled={loading !== null}
-            >
-              {loading === 'demo' ? 'Loading...' : 'See Demo Tournament'}
-              <Users className="h-4 w-4" />
-            </Button>
-          </div>
+          {/* Guide / Instructions Block */}
+          <div className="max-w-3xl mx-auto mb-12 bg-neutral-900/60 border border-neutral-800 rounded-2xl p-6 md:p-8 text-left shadow-[0_8px_30px_rgb(0,0,0,0.6)] backdrop-blur-sm relative">
+            <div className="absolute -top-3 left-6 px-3 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-amber-500 text-neutral-950 rounded-full">
+              4-Step Testing Guide
+            </div>
 
-          {/* Play vs Bot buttons */}
-          <div className="flex items-center justify-center gap-3 flex-wrap mt-5">
-            <span className="text-sm text-muted-foreground mr-1">Play vs Bot:</span>
-            <Button
-              variant="outline"
-              size="sm"
-              className="gap-1.5"
-              onClick={() => handleVsBot('TRIVIA')}
-              disabled={loading !== null}
-            >
-              {loading === 'vsbot' ? '...' : <><Brain className="h-3.5 w-3.5" /> Trivia</>}
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              className="gap-1.5"
-              onClick={() => handleVsBot('QUICK_DRAW')}
-              disabled={loading !== null}
-            >
-              {loading === 'vsbot' ? '...' : <><Swords className="h-3.5 w-3.5" /> Quick Draw</>}
-            </Button>
-          </div>
-
-          {/* Quick Match — two real players */}
-          <div className="flex items-center justify-center gap-3 flex-wrap mt-3">
-            <span className="text-sm text-muted-foreground mr-1">Quick Match (2 players):</span>
-            <Button
-              variant="secondary"
-              size="sm"
-              className="gap-1.5"
-              onClick={() => handleQuickMatch('TRIVIA')}
-              disabled={loading !== null}
-            >
-              {loading === 'quick' ? '...' : <><Brain className="h-3.5 w-3.5" /> Trivia</>}
-            </Button>
-            <Button
-              variant="secondary"
-              size="sm"
-              className="gap-1.5"
-              onClick={() => handleQuickMatch('QUICK_DRAW')}
-              disabled={loading !== null}
-            >
-              {loading === 'quick' ? '...' : <><Swords className="h-3.5 w-3.5" /> Quick Draw</>}
-            </Button>
-          </div>
-
-          <p className="text-xs text-muted-foreground mt-4 max-w-lg mx-auto">
-            <strong>Real-time proof:</strong> Open this page in two browser windows (use Incognito for the 2nd).
-            Click <strong>Quick Match</strong> in one, copy the invite link, open it in the other window.
-            Both join the match — watch answers/strokes sync live via WebSocket.
-          </p>
-
-          <div className="mt-12 max-w-md mx-auto">
-            <div className="bg-surface rounded-xl border border-border p-4">
-              <p className="text-xs text-muted-foreground mb-3 text-center">Demo Bracket (Completed)</p>
-              <div className="space-y-2">
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="col-span-2 text-[10px] text-muted-foreground font-medium px-1">Round 1</div>
-                  {BRACKET_PREVIEW.map((p, i) => (
-                    <div
-                      key={i}
-                      className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm ${
-                        p.winner
-                          ? 'bg-primary/10 text-primary border border-primary/20'
-                          : 'bg-muted text-muted-foreground border border-border'
-                      }`}
-                    >
-                      <Trophy className={`h-3 w-3 ${p.winner ? '' : 'opacity-0'}`} />
-                      <span className={p.winner ? 'font-medium' : ''}>{p.name}</span>
-                    </div>
-                  ))}
+            <div className="grid md:grid-cols-2 gap-6 mt-2">
+              <div className="space-y-4">
+                <div className="flex gap-3">
+                  <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-amber-500/10 text-amber-400 text-xs font-bold border border-amber-500/20">1</div>
+                  <p className="text-sm text-neutral-300">
+                    Click <strong className="text-amber-400">Quick Match</strong> on either Trivia or Quick Draw below.
+                  </p>
                 </div>
-                <div className="border-t border-border pt-2">
-                  <div className="grid grid-cols-1 gap-2">
-                    <div className="text-[10px] text-muted-foreground font-medium px-1">Round 2 (Final)</div>
-                    <div className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm bg-primary/10 text-primary border border-primary/20">
-                      <Trophy className="h-3 w-3" />
-                      <span className="font-medium">You</span>
-                      <span className="text-[10px] ml-auto text-primary/60">🏆 Champion</span>
-                    </div>
-                  </div>
+                <div className="flex gap-3">
+                  <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-amber-500/10 text-amber-400 text-xs font-bold border border-amber-500/20">2</div>
+                  <p className="text-sm text-neutral-300">
+                    Copy the lobby invite link displayed inside the tournament header.
+                  </p>
                 </div>
               </div>
-              <div className="flex justify-center mt-2">
-                <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                  <Users className="h-3 w-3" /> You vs 3 Bots · Tournament Completed
+              <div className="space-y-4">
+                <div className="flex gap-3">
+                  <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-amber-500/10 text-amber-400 text-xs font-bold border border-amber-500/20">3</div>
+                  <p className="text-sm text-neutral-300">
+                    Open an <span className="underline decoration-amber-500/50">Incognito tab</span>, paste the link, and hit join.
+                  </p>
+                </div>
+                <div className="flex gap-3">
+                  <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-amber-500/10 text-amber-400 text-xs font-bold border border-amber-500/20">4</div>
+                  <p className="text-sm text-neutral-300">
+                    Play and observe instant, low-latency WebSocket sync on both screens.
+                  </p>
                 </div>
               </div>
             </div>
+
+            <div className="mt-6 pt-6 border-t border-neutral-800/80 flex flex-col sm:flex-row items-center justify-between gap-4">
+              <span className="text-xs text-neutral-500">Need to copy URL to paste in Incognito?</span>
+              <Button
+                variant="outline"
+                size="sm"
+                className="border-neutral-800 text-neutral-300 hover:bg-neutral-900 flex items-center gap-1.5"
+                onClick={handleCopyLink}
+              >
+                {copiedStep ? (
+                  <>
+                    <Check className="h-3.5 w-3.5 text-emerald-400" />
+                    <span>Copied Base URL</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy className="h-3.5 w-3.5" />
+                    <span>Copy Base URL</span>
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+
+          {/* Quick Match Cards */}
+          <div className="grid md:grid-cols-2 gap-6 max-w-3xl mx-auto">
+            {/* Trivia Duel Card */}
+            <div className="relative overflow-hidden rounded-2xl border border-neutral-800 bg-gradient-to-br from-neutral-900 to-emerald-950/20 p-6 md:p-8 flex flex-col justify-between text-left group hover:border-emerald-500/40 transition-all duration-300 shadow-lg hover:shadow-emerald-500/5">
+              <div className="absolute right-0 top-0 h-24 w-24 rounded-full bg-emerald-500/5 blur-2xl pointer-events-none" />
+              <div>
+                <div className="h-12 w-12 rounded-xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center mb-6 border border-emerald-500/20 group-hover:scale-105 transition-transform">
+                  <Brain className="h-6 w-6" />
+                </div>
+                <h3 className="text-xl font-bold text-neutral-100 mb-2">Trivia Duel</h3>
+                <p className="text-sm text-neutral-400 mb-6 leading-relaxed">
+                  Join a real-time question arena. Players receive the same question simultaneously. Answers and score updates are instantly synchronized.
+                </p>
+              </div>
+              <Button
+                className="w-full bg-emerald-500 hover:bg-emerald-600 text-neutral-950 font-bold flex items-center justify-center gap-2 h-11"
+                onClick={() => handleQuickMatch('TRIVIA')}
+                disabled={loading !== null}
+              >
+                {loading === 'TRIVIA' ? 'Creating Arena...' : 'Launch Trivia Quick Match'}
+                <ArrowRight className="h-4 w-4" />
+              </Button>
+            </div>
+
+            {/* Quick Draw Canvas Card */}
+            <div className="relative overflow-hidden rounded-2xl border border-neutral-800 bg-gradient-to-br from-neutral-900 to-amber-950/20 p-6 md:p-8 flex flex-col justify-between text-left group hover:border-amber-500/40 transition-all duration-300 shadow-lg hover:shadow-amber-500/5">
+              <div className="absolute right-0 top-0 h-24 w-24 rounded-full bg-amber-500/5 blur-2xl pointer-events-none" />
+              <div>
+                <div className="h-12 w-12 rounded-xl bg-amber-500/10 text-amber-400 flex items-center justify-center mb-6 border border-amber-500/20 group-hover:scale-105 transition-transform">
+                  <Swords className="h-6 w-6" />
+                </div>
+                <h3 className="text-xl font-bold text-neutral-100 mb-2">Quick Draw Canvas</h3>
+                <p className="text-sm text-neutral-400 mb-6 leading-relaxed">
+                  One player draws, the other guesses in real-time. Stroke vectors and guess events sync instantly on the shared canvas screen.
+                </p>
+              </div>
+              <Button
+                className="w-full bg-amber-500 hover:bg-amber-600 text-neutral-950 font-bold flex items-center justify-center gap-2 h-11"
+                onClick={() => handleQuickMatch('QUICK_DRAW')}
+                disabled={loading !== null}
+              >
+                {loading === 'QUICK_DRAW' ? 'Creating Lobby...' : 'Launch Quick Draw Match'}
+                <ArrowRight className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+
+          <div className="mt-8 flex justify-center">
+            {token ? (
+              <span className="text-sm text-neutral-500">
+                You are currently signed in. You can also test guest matching in Incognito!
+              </span>
+            ) : (
+              <Button
+                variant="link"
+                className="text-neutral-400 hover:text-amber-400 text-sm font-semibold transition-colors"
+                onClick={handleGuestLogin}
+                disabled={loading !== null}
+              >
+                Or enter normal Dashboard as Guest &rarr;
+              </Button>
+            )}
           </div>
         </div>
       </section>
 
-      <section className="max-w-5xl mx-auto px-4 pb-20">
-        <div className="text-center mb-10">
-          <h2 className="text-2xl font-bold mb-2">How It Works</h2>
-          <p className="text-muted-foreground">Three game modes. Infinite competition.</p>
+      {/* Feature Showcase */}
+      <section className="max-w-5xl mx-auto px-4 pb-24">
+        <div className="text-center mb-16">
+          <h2 className="text-3xl font-extrabold tracking-tight mb-3">Core App Features</h2>
+          <p className="text-neutral-400 max-w-md mx-auto">Modern real-time gameplay architecture built from scratch.</p>
         </div>
 
-        <div className="grid md:grid-cols-3 gap-4">
+        <div className="grid md:grid-cols-3 gap-6">
           {FEATURES.map((feature, i) => (
-            <Card key={i} className="bg-surface border-border overflow-hidden group">
+            <Card key={i} className="bg-neutral-900/40 border-neutral-800/80 overflow-hidden hover:border-neutral-700/80 transition-colors group">
               <CardContent className="p-0">
                 <div className={`h-1 w-full bg-gradient-to-r ${feature.gradient}`} />
-                <div className="p-5 space-y-3">
-                  <div className={`w-10 h-10 rounded-lg bg-muted flex items-center justify-center ${feature.accent}`}>
+                <div className="p-6 space-y-4">
+                  <div className={`w-10 h-10 rounded-lg bg-neutral-950 flex items-center justify-center border border-neutral-800 ${feature.accent}`}>
                     {feature.icon}
                   </div>
-                  <h3 className="font-semibold">{feature.title}</h3>
-                  <p className="text-sm text-muted-foreground leading-relaxed">{feature.desc}</p>
+                  <h3 className="font-bold text-neutral-200">{feature.title}</h3>
+                  <p className="text-sm text-neutral-400 leading-relaxed">{feature.desc}</p>
                 </div>
               </CardContent>
             </Card>
@@ -307,9 +290,14 @@ export default function LandingPage() {
         </div>
       </section>
 
-      <footer className="border-t border-border py-6">
-        <div className="max-w-5xl mx-auto px-4 text-center text-xs text-muted-foreground">
-          TourneyHub — Built with React, Node.js, Socket.io, PostgreSQL
+      <footer className="border-t border-neutral-800 bg-neutral-950 py-8">
+        <div className="max-w-5xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-neutral-500">
+          <div>
+            TourneyHub &copy; {new Date().getFullYear()} · All rights reserved.
+          </div>
+          <div>
+            Built with React, Socket.io, Node.js, and PostgreSQL
+          </div>
         </div>
       </footer>
     </div>

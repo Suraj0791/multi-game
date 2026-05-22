@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { create, getAll, getOne, startTournament, getMatches, getBracket, createDemo } from '../controllers/tournamentController.js';
+import { create, getAll, getOne, startTournament, getMatches, getBracket } from '../controllers/tournamentController.js';
 import { join, players, leave } from '../controllers/playerController.js';
 import { authenticate } from '../middleware/auth.middleware.js';
 import { validate, createTournamentRules } from '../middleware/validate.middleware.js';
@@ -7,7 +7,6 @@ import { validate, createTournamentRules } from '../middleware/validate.middlewa
 const router = Router();
 
 // Tournament CRUD
-router.post('/demo', authenticate, createDemo);
 router.post('/', authenticate, validate(createTournamentRules), create);
 router.get('/', getAll);                       // List all tournaments (public)
 router.get('/:id', getOne);                    // View one tournament (public)

@@ -70,18 +70,7 @@ export async function getAll(req, res) {
 
 
 
-import { startTournament as startService, getTournamentMatches, getTournamentBracket, createDemoTournament as createDemoService } from '../services/tournamentService.js';
-
-export async function createDemo(req, res) {
-  try {
-    const hostId = req.user.userId;
-    const result = await createDemoService(hostId);
-    res.status(201).json(result);
-  } catch (error) {
-    console.error('Error creating demo tournament:', error.message);
-    res.status(400).json({ error: error.message });
-  }
-}
+import { startTournament as startService, getTournamentMatches, getTournamentBracket } from '../services/tournamentService.js';
 
 // Handle PUT /tournaments/:id/start
 export async function startTournament(req, res) {

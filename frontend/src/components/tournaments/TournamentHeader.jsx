@@ -1,8 +1,10 @@
 // Tournament Header — shows tournament info at the top
 // DUMB: receives tournament object, displays it. No API, no state.
 
+import { useState } from 'react'
+import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Swords, User, IndianRupee, Users, Trophy } from 'lucide-react'
+import { Swords, User, IndianRupee, Users, Copy, Check } from 'lucide-react'
 
 const STATUS_LABELS = {
   REGISTRATION: 'Registration Open',
@@ -17,6 +19,20 @@ const STATUS_COLORS = {
 }
 
 export default function TournamentHeader({ tournament }) {
+  const [copied, setCopied] = useState(false)
+
+  const handleCopyLink = async () => {
+    try {
+      await navigator.clipboard.writeText(window.location.href)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch (err) {
+      console.error('Failed to copy text: ', err)
+    }
+  }
+
+  const inviteLink = typeof window !== 'undefined' ? window.location.href : ''
+
   return (
     <div className="relative overflow-hidden rounded-xl border border-neutral-800 bg-gradient-to-br from-neutral-900 via-neutral-950 to-amber-950/10 p-6 md:p-8 shadow-[0_4px_20px_rgba(0,0,0,0.4)]">
       {/* Absolute Decorative Glow */}
@@ -34,6 +50,34 @@ export default function TournamentHeader({ tournament }) {
             {tournament.name}
           </h1>
         </div>
+
+        {tournament.status === 'REGISTRATION' && (
+          <div className="flex items-center gap-2 bg-neutral-900/80 border border-neutral-800 rounded-lg p-2 max-w-full md:max-w-md w-full md:w-auto">
+            <input
+              type="text"
+              readOnly
+              value={inviteLink}
+              className="bg-transparent text-xs text-neutral-400 outline-none px-2 select-all w-full truncate md:w-60"
+            />
+            <Button
+              onClick={handleCopyLink}
+              size="sm"
+              className="bg-amber-500 hover:bg-amber-600 text-neutral-950 font-bold shrink-0 flex items-center gap-1.5"
+            >
+              {copied ? (
+                <>
+                  <Check className="h-4 w-4" />
+                  <span>Copied</span>
+                </>
+              ) : (
+                <>
+                  <Copy className="h-4 w-4" />
+                  <span>Copy Invite Link</span>
+                </>
+              )}
+            </Button>
+          </div>
+        )}
       </div>
 
       {/* Grid of info boxes */}

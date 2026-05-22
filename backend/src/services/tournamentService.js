@@ -1,4 +1,3 @@
-import bcrypt from 'bcryptjs';
 import {
   createTournament as insertTournament,
   getTournaments as fetchTournaments,
@@ -7,7 +6,6 @@ import {
 } from '../models/Tournament.js';
 import { getPlayersByTournament, addPlayer, updatePlayerPaymentStatus } from '../models/TournamentPlayer.js';
 import { createMatch, getMatchesByTournament, updateMatchWinner } from '../models/Match.js';
-import { createUser, findByEmail } from '../models/User.js';
 
 export async function createTournament(name, game_type, max_players, entry_fee, host_id) {
   // Validate required fields (entry_fee can be 0, so we don't check it)
@@ -178,62 +176,7 @@ export async function getTournamentMatches(id) {
   }));
 }
 
-// Group matches by round for the bracket UI
-export const BOT_CREDENTIALS = [
-  { username: 'Bot_Alice', email: 'bot_alice@tourneyhub.demo' },
-  { username: 'Bot_Bob', email: 'bot_bob@tourneyhub.demo' },
-  { username: 'Bot_Charlie', email: 'bot_charlie@tourneyhub.demo' },
-];
 
-export async function getOrCreateBotUser({ username, email }) {
-  const existing = await findByEmail(email);
-  if (existing) return existing;
-  const hashedPassword = await bcrypt.hash('demo_bot_pass', 10);
-  return await createUser(username, email, hashedPassword);
-}
-
-export async function createDemoTournament(hostId) {
-  const name = 'Demo Tournament';
-  const gameType = 'TRIVIA';
-  const maxPlayers = 4;
-  const entryFee = 0;
-
-  const tournament = await insertTournament(name, gameType, maxPlayers, entryFee, hostId);
-
-  // Add Host
-  await addPlayer(tournament.id, hostId);
-  await updatePlayerPaymentStatus(tournament.id, hostId, 'COMPLETED');
-
-  // Add Bots
-  const bots = await Promise.all(BOT_CREDENTIALS.map(getOrCreateBotUser));
-  for (const bot of bots) {
-    await addPlayer(tournament.id, bot.id);
-    await updatePlayerPaymentStatus(tournament.id, bot.id, 'COMPLETED');
-  }
-
-  const players = await getPlayersByTournament(tournament.id);
-  const hostAsPlayer = players.find(p => Number(p.player_id) === Number(hostId));
-  const botsInTournament = players.filter(p => Number(p.player_id) !== Number(hostId));
-
-  // Match 1: Host vs Bot Alice
-  const match1 = await createMatch(tournament.id, hostAsPlayer.player_id, botsInTournament[0].player_id, 1, 1);
-  // Match 2: Bot Bob vs Bot Charlie
-  const match2 = await createMatch(tournament.id, botsInTournament[1].player_id, botsInTournament[2].player_id, 1, 2);
-
-  await updateTournamentStatus(tournament.id, 'IN_PROGRESS');
-
-  // ONLY complete the bot vs bot match so the bracket looks alive.
-  // Leave match1 alone so the user can actually play it!
-  await updateMatchWinner(match2.id, botsInTournament[1].player_id);
-
-  // Return the matchId so the frontend can navigate directly into the game!
-  return { 
-    tournamentId: tournament.id, 
-    status: 'IN_PROGRESS', 
-    gameType,
-    firstMatchId: match1.id // Crucial for auto-navigation
-  };
-}
 
 export async function getTournamentBracket(id) {
   const matches = await getTournamentMatches(id);
