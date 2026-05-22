@@ -13,6 +13,13 @@ const chatUsernames = {};
 const lastChatTime = {};
 const socketJoinedRooms = {};
 
+let ioInstance = null;
+
+export function getIO() {
+  return ioInstance;
+}
+
+
 function checkTriviaBothAnswered(io, matchId, player1Id, player2Id, roomName) {
   const game = activeTriviaGames[matchId];
   if (!game || game.roundEnded) return;
@@ -87,8 +94,17 @@ async function sendNextTriviaQuestion(io, matchId, player1Id, player2Id) {
 
 export default function setupSocketEvents(io) {
   setSocketIO(io);
+  ioInstance = io;
 
   io.on("connection", (socket) => {
+    // Join tournament room
+    socket.on("tournament:join", (data) => {
+      const { tournamentId } = data;
+      if (tournamentId) {
+        socket.join(`tournament_${tournamentId}`);
+        console.log(`🔌 Socket ${socket.id} joined tournament_${tournamentId}`);
+      }
+    });
     
     // ==========================================
     // TRIVIA GAME EVENTS
@@ -146,12 +162,12 @@ export default function setupSocketEvents(io) {
               }
 
               io.to(roomName).emit("trivia:started", {
-                message: "Game starting in 3 seconds!",
+                message: "Game starting in 5 seconds!",
               });
 
               game.timeoutId = setTimeout(() => {
                 sendNextTriviaQuestion(io, matchId, match.player_1_id, match.player_2_id);
-              }, 3000);
+              }, 5000);
             } else {
               // Kill ghost timers
               if (game.waitingTimeoutId) clearTimeout(game.waitingTimeoutId);
@@ -302,39 +318,44 @@ export default function setupSocketEvents(io) {
                 game.waitingTimeoutId = null;
               }
 
-              io.to(roomName).emit("game_status", { message: "Match started!" });
+              io.to(roomName).emit("game_status", { message: "Game starting in 5 seconds!" });
 
-              game.timeRemaining = game.timeLimit;
-              io.to(roomName).emit("quickdraw:timer", { timeRemaining: game.timeRemaining });
-              game.timerInterval = setInterval(() => {
-                game.timeRemaining--;
+              setTimeout(async () => {
+                if (!activeGames[matchId]) return;
+                io.to(roomName).emit("game_status", { message: "Match started!" });
+
+                game.timeRemaining = game.timeLimit;
                 io.to(roomName).emit("quickdraw:timer", { timeRemaining: game.timeRemaining });
-                if (game.timeRemaining <= 0) {
-                  clearInterval(game.timerInterval);
-                  game.timerInterval = null;
-                  if (activeGames[matchId]) {
-                    const winnerId = game.drawerId;
-                    delete activeGames[matchId];
-                    completeMatch(matchId, winnerId).catch(() => { });
-                    io.to(roomName).emit("match_over", {
-                      winnerId,
-                      word: game.wordToDraw,
-                      message: "Time's up!",
+                game.timerInterval = setInterval(() => {
+                  game.timeRemaining--;
+                  io.to(roomName).emit("quickdraw:timer", { timeRemaining: game.timeRemaining });
+                  if (game.timeRemaining <= 0) {
+                    clearInterval(game.timerInterval);
+                    game.timerInterval = null;
+                    if (activeGames[matchId]) {
+                      const winnerId = game.drawerId;
+                      delete activeGames[matchId];
+                      completeMatch(matchId, winnerId).catch(() => { });
+                      io.to(roomName).emit("match_over", {
+                        winnerId,
+                        word: game.wordToDraw,
+                        message: "Time's up!",
+                      });
+                    }
+                  }
+                }, 1000);
+
+                const socketsInRoom = await io.in(roomName).fetchSockets();
+                for (const sock of socketsInRoom) {
+                  if (Number(sock.playerId) === Number(game.drawerId)) {
+                    sock.emit("game_status", {
+                      message: "You are the drawer. Start drawing!",
+                      wordToDraw: game.wordToDraw,
                     });
+                    break;
                   }
                 }
-              }, 1000);
-
-              const socketsInRoom = await io.in(roomName).fetchSockets();
-              for (const sock of socketsInRoom) {
-                if (Number(sock.playerId) === Number(game.drawerId)) {
-                  sock.emit("game_status", {
-                    message: "You are the drawer. Start drawing!",
-                    wordToDraw: game.wordToDraw,
-                  });
-                  break;
-                }
-              }
+              }, 5000);
             } else {
               if (game.waitingTimeoutId) clearTimeout(game.waitingTimeoutId);
               game.waitingTimeoutId = setTimeout(() => {

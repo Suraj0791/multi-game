@@ -13,7 +13,7 @@ export default function TriviaGame({ socket, matchId, currentUserId, isSpectator
   const [scores, setScores] = useState({})
   const [finalResult, setFinalResult] = useState(null)
   const [questionStartTime, setQuestionStartTime] = useState(0)
-  const [countdown, setCountdown] = useState(3)
+  const [countdown, setCountdown] = useState(5)
   const [hasAnsweredCurrent, setHasAnsweredCurrent] = useState(false)
 
   const userIdNum = Number(currentUserId)
@@ -22,7 +22,7 @@ export default function TriviaGame({ socket, matchId, currentUserId, isSpectator
   // Starting Countdown
   useEffect(() => {
     if (gameStatus !== 'starting') return
-    setCountdown(3)
+    setCountdown(5)
     const interval = setInterval(() => {
       setCountdown(prev => {
         if (prev <= 1) {

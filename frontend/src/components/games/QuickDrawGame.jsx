@@ -55,6 +55,23 @@ export default function QuickDrawGame({
   const [timeRemaining, setTimeRemaining] = useState(60);
   const [attemptsLeft, setAttemptsLeft] = useState(MAX_ATTEMPTS);
   const [guesses, setGuesses] = useState([]);
+  const [countdown, setCountdown] = useState(5);
+
+  // Starting Countdown
+  useEffect(() => {
+    if (gameStatus !== 'starting') return;
+    setCountdown(5);
+    const interval = setInterval(() => {
+      setCountdown(prev => {
+        if (prev <= 1) {
+          clearInterval(interval);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [gameStatus]);
 
   const canvasRef = useRef(null);
 
@@ -77,6 +94,10 @@ export default function QuickDrawGame({
     if (!socket || !safeUserId) return;
 
     const onGameStatus = (data) => {
+      if (data.message && data.message.includes("starting in")) {
+        setGameStatus("starting");
+        return;
+      }
       setGameStatus("playing");
       if (data.wordToDraw) {
         setWordToDraw(data.wordToDraw);
@@ -374,8 +395,8 @@ export default function QuickDrawGame({
         </CardContent>
       </Card>
 
-      {/* Waiting message */}
-      {gameStatus === "waiting" && (
+      {/* Waiting / Starting message */}
+      {(gameStatus === "waiting" || gameStatus === "starting") && (
         <Card className="border-neutral-800 bg-neutral-950 shadow-2xl">
           <CardContent className="p-8 text-center space-y-4">
             {isSpectator && (
@@ -385,9 +406,13 @@ export default function QuickDrawGame({
             )}
             <Pencil className="h-12 w-12 text-amber-500 mx-auto mb-2 animate-bounce" />
             <h2 className="text-xl font-bold text-neutral-100">
-              {isSpectator ? 'Waiting for match to begin...' : 'Waiting for opponent...'}
+              {isSpectator ? 'Waiting for match to begin...' : (gameStatus === 'starting' ? 'Game Starting!' : 'Waiting for opponent...')}
             </h2>
-            <p className="text-neutral-400 text-sm">Quick Draw match starting soon</p>
+            {gameStatus === 'starting' && !isSpectator && countdown > 0 ? (
+              <p className="text-4xl font-black text-amber-500 animate-pulse">{countdown}...</p>
+            ) : (
+              <p className="text-neutral-400 text-sm">Quick Draw match starting soon</p>
+            )}
           </CardContent>
         </Card>
       )}

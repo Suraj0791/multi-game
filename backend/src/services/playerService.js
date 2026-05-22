@@ -1,5 +1,8 @@
 import { addPlayer, findPlayer, getPlayersByTournament, removePlayer, countPlayers, updatePlayerPaymentStatus } from '../models/TournamentPlayer.js';
 import { getTournamentById as fetchTournamentById } from '../models/Tournament.js';
+import { startTournament, getTournamentMatches } from './tournamentService.js';
+import { getIO } from '../socket/socketEvents.js';
+
 
 // JOIN a tournament
 // Business rules: tournament must exist, be in REGISTRATION, not full, player not already in
@@ -33,6 +36,32 @@ export async function joinTournament(tournamentId, playerId) {
   // If the tournament is free, auto-complete the player's payment status
   if (Number(tournament.entry_fee) === 0) {
     await updatePlayerPaymentStatus(tournamentId, playerId, 'COMPLETED');
+  }
+
+  // --- AUTO START QUICK MATCH ---
+  // If this is a 2-player tournament and is in registration, auto-start it when full
+  const finalPlayerCount = await countPlayers(tournamentId);
+  if (tournament.max_players === 2 && finalPlayerCount === 2) {
+    try {
+      console.log(`⚡ Auto-starting quick match tournament ${tournamentId}...`);
+      const started = await startTournament(tournamentId, tournament.host_id);
+      if (started.bracketGenerated) {
+        const matches = await getTournamentMatches(tournamentId);
+        if (matches && matches.length > 0) {
+          const matchId = matches[0].id;
+          const io = getIO();
+          if (io) {
+            console.log(`📢 Broadcasting tournament:started for tournament ${tournamentId} with match ${matchId}`);
+            io.to(`tournament_${tournamentId}`).emit("tournament:started", {
+              tournamentId: Number(tournamentId),
+              matchId: Number(matchId)
+            });
+          }
+        }
+      }
+    } catch (err) {
+      console.error(`❌ Failed to auto-start quick match tournament ${tournamentId}:`, err.message);
+    }
   }
 
   return {

@@ -55,8 +55,8 @@ export default function LandingPage() {
     try {
       const data = await createQuickMatch(gameType)
       login(data.token, data.userId)
-      // For quick match, take them to the tournament lobby so they can easily copy the URL for tab 2
-      navigate(`/tournaments/${data.tournamentId}`, { replace: true })
+      // Redirect to the match waiting room page directly
+      navigate(`/tournaments/${data.tournamentId}/match/waiting`, { replace: true })
     } catch {
       setLoading(null)
     }

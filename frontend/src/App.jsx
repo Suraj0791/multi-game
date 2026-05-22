@@ -70,6 +70,13 @@ function App() {
               </PublicRoute>
             } />
 
+            {/* ====== PUBLIC MATCH WAITING ROOM (no login needed) ====== */}
+            {/* This route MUST be outside ProtectedRoute so Player 2 in Incognito */}
+            {/* can land here directly — MatchPage handles its own guest auto-login */}
+            <Route element={<Layout />}>
+              <Route path="/tournaments/:id/match/waiting" element={<MatchPage />} />
+            </Route>
+
             {/* ====== PROTECTED ROUTES (login required) ====== */}
             {/* Layout adds the Navbar + page wrapper around ALL these routes */}
             {/* ProtectedRoute checks for JWT token before rendering */}
