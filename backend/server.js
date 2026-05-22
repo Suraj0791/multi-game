@@ -1,7 +1,7 @@
 import "dotenv/config";
-import { createServer } from "http"; // Built-in Node module
-import { Server } from "socket.io";  // The library we just installed
-import app from "./src/app.js";
+import { createServer } from "http";
+import { Server } from "socket.io";
+import app, { setDebugIO } from "./src/app.js";
 
 const port = Number(process.env.PORT) || 3000;
 
@@ -13,14 +13,17 @@ const httpServer = createServer(app);
 // 2. Attach the Socket.io "Switchboard" to that server
 export const io = new Server(httpServer, {
   cors: {
-    origin: "*", // Allow any frontend to call us
+    origin: "*",
   }
 });
 
-// 3. Hand the Switchboard over to our Instruction Manual!
+// 3. Expose IO to debug endpoint for test instrumentation
+setDebugIO(io);
+
+// 4. Hand the Switchboard over to our Instruction Manual!
 setupSocketEvents(io);
 
-// 4. IMPORTANT: Change app.listen to httpServer.listen!
+// 5. IMPORTANT: Change app.listen to httpServer.listen!
 httpServer.listen(port, () => {
   console.log(`🚀 Backend (HTTP & WebSockets) listening on port ${port}`);
 });

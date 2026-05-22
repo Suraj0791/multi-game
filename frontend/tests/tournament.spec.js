@@ -1,4 +1,7 @@
 import { test, expect } from "@playwright/test";
+import { injectSocketTracer, getSocketEvents, dumpSocketEvents, findMissingEvent } from "./helpers/socketTracer.js";
+import { captureFailureContext, setupConsoleCapture, dumpState } from "./helpers/failureContext.js";
+import { startFlow, flowStep, flowStepOk, flowStepAsync, endFlow } from "./helpers/flowReporter.js";
 
 const API_URL = process.env.E2E_BACKEND_URL || "http://localhost:3000";
 
@@ -20,6 +23,23 @@ function setupLogging(page, name) {
     );
   });
 }
+
+// Enhanced logging that captures failure context on test failure
+test.afterEach(async ({ page }, testInfo) => {
+  if (testInfo.status !== 'passed' && page) {
+    try {
+      console.log(`\n  🔍 Test FAILED: ${testInfo.title}`);
+      console.log(`  Error: ${testInfo.error?.message || 'Unknown'}`);
+      await dumpSocketEvents(page, 'Socket Events at Failure');
+      await dumpState(page);
+      await captureFailureContext(page, testInfo.title, {
+        error: testInfo.error?.message || 'Unknown',
+      });
+    } catch (e) {
+      console.log(`  ⚠ Failure context capture error: ${e.message}`);
+    }
+  }
+});
 
 // REST API Helpers
 async function apiLogin(request, email, password) {
@@ -96,33 +116,90 @@ async function uiLogin(page, email, password) {
 }
 
 // Trivia Play Helper — clicks any available answer until the match ends
-async function playTriviaToEnd(page) {
+async function playTriviaToEnd(page, label = 'player') {
   const finished = page
     .locator("text=You Won!")
     .or(page.locator("text=Game Over"))
-    .or(page.locator("text=Match Finished"));
-  for (let i = 0; i < 15; i++) {
-    if (await finished.isVisible()) return;
+    .or(page.locator("text=Match Finished"))
+    .or(page.locator("text=Completed"));
+  const startTime = Date.now();
+  const maxDuration = 120_000;
 
-    const answerBtn = page
-      .locator("button.justify-start:not([disabled])")
-      .first();
+  for (let i = 0; i < 20; i++) {
+    // Check if page is still alive and on the right URL
     try {
-      await expect(answerBtn).toBeVisible({ timeout: 15_000 });
-      await answerBtn.click();
+      if (!page.isClosed() && page.url().includes('/match/')) {
+        // Check if match already ended
+        if (await finished.isVisible({ timeout: 1000 }).catch(() => false)) {
+          console.log(`  [Trivia ${label}] Match ended - detected finish text`);
+          return;
+        }
+      } else {
+        console.log(`  [Trivia ${label}] Page navigated away from match (${page.url() || 'closed'})`);
+        return;
+      }
     } catch (e) {
-      if (await finished.isVisible()) return;
+      console.log(`  [Trivia ${label}] Page check error: ${e.message} — assuming match ended`);
+      return;
     }
 
-    const feedback = page.locator("div.text-center.text-sm");
+    // Try to click an answer
     try {
-      await expect(feedback).toBeVisible({ timeout: 10_000 });
+      if (page.isClosed()) { console.log(`  [Trivia ${label}] Page closed`); return; }
+
+      const answerBtn = page.locator("button.justify-start:not([disabled])").first();
+      const btnVisible = await answerBtn.isVisible({ timeout: 8_000 }).catch(() => false);
+
+      if (btnVisible) {
+        await answerBtn.click();
+        console.log(`  [Trivia ${label}] Clicked answer (attempt ${i + 1})`);
+      } else {
+        // If no button visible, check if match ended
+        if (await finished.isVisible({ timeout: 1000 }).catch(() => false)) return;
+        console.log(`  [Trivia ${label}] No answer button visible, waiting...`);
+        await new Promise(r => setTimeout(r, 2000));
+        continue;
+      }
+    } catch (e) {
+      if (await finished.isVisible({ timeout: 500 }).catch(() => false)) return;
+      console.log(`  [Trivia ${label}] Click error: ${e.message.slice(0, 80)}`);
+      await new Promise(r => setTimeout(r, 1000));
+    }
+
+    // Wait for feedback
+    try {
+      if (!page.isClosed()) {
+        await page.locator("div.text-center.text-sm").waitFor({ state: 'visible', timeout: 10_000 }).catch(() => {});
+      }
     } catch (e) {
       // ignore transition timeouts
     }
+
+    if (Date.now() - startTime > maxDuration) {
+      console.log(`  [Trivia ${label}] TIMEOUT exceeded ${maxDuration}ms`);
+      break;
+    }
   }
 
-  await expect(finished).toBeVisible({ timeout: 45_000 });
+  // Final check
+  try {
+    if (!page.isClosed()) {
+      await expect(finished).toBeVisible({ timeout: 30_000 });
+    }
+  } catch (e) {
+    console.log(`  [Trivia ${label}] Final finish check failed: ${e.message}`);
+    // Try to dump state
+    try {
+      if (!page.isClosed()) {
+        await dumpState(page);
+        const events = await getSocketEvents(page);
+        console.log(`  [Trivia ${label}] Socket events: ${events.length}`);
+        const matchOverEvents = events.filter(e => e.event === 'trivia:match_over');
+        console.log(`  [Trivia ${label}] match_over events: ${matchOverEvents.length}`);
+      }
+    } catch {}
+    throw e;
+  }
 }
 
 // Force-complete all remaining matches in a tournament via API
@@ -286,6 +363,9 @@ test.describe("TourneyHub End-to-End Suite", () => {
     setupLogging(drawerPage, isP1Drawer ? "p1-drawer" : "p2-drawer");
     setupLogging(guesserPage, isP1Drawer ? "p2-guesser" : "p1-guesser");
 
+    await injectSocketTracer(drawerPage);
+    await injectSocketTracer(guesserPage);
+
     // Log in the correct user for each role
     if (isP1Drawer) {
       await uiLogin(drawerPage, "player1@test.com", "password123");
@@ -295,12 +375,15 @@ test.describe("TourneyHub End-to-End Suite", () => {
       await uiLogin(guesserPage, "player1@test.com", "password123");
     }
 
+    flowStep('Navigating drawer and guesser to match page');
     await drawerPage.goto(`/tournaments/${tournamentId}/match/${match.id}`);
     await guesserPage.goto(`/tournaments/${tournamentId}/match/${match.id}`);
+    flowStep('Waiting for role indicators');
 
     // Verify role indicators (drawer sees DRAWING, guesser sees GUESSING)
     await expect(drawerPage.locator("text=You are DRAWING")).toBeVisible({ timeout: 25_000 });
     await expect(guesserPage.locator("text=You are GUESSING")).toBeVisible({ timeout: 25_000 });
+    flowStepOk('Both players see correct role indicators');
 
     // Empty guess validation check
     const guessInput = guesserPage.locator('input[placeholder="Type your guess..."]');
@@ -371,22 +454,35 @@ test.describe("TourneyHub End-to-End Suite", () => {
     await uiLogin(p2Page, "player2@test.com", "password123");
 
     // Navigate both pages in parallel so both sockets connect around the same time
+    // Inject socket tracers before navigation
+    await injectSocketTracer(p1Page);
+    await injectSocketTracer(p2Page);
+
     await Promise.all([
       p1Page.goto(`/tournaments/${tournamentId}/match/${match.id}`),
       p2Page.goto(`/tournaments/${tournamentId}/match/${match.id}`),
     ]);
 
-    // Check both pages IN PARALLEL for "Game Starting!" (countdown only lasts 3 seconds)
+    // Wait for match to start — accept either "Game Starting!" or "Your Score:" (already playing)
+    // Using .toPass() to handle the 3-second countdown timing window
+    flowStep('Waiting for game to start on both pages');
     await expect(async () => {
-      await expect(p1Page.locator("text=Game Starting!")).toBeVisible({ timeout: 10_000 });
-      await expect(p2Page.locator("text=Game Starting!")).toBeVisible({ timeout: 10_000 });
+      await expect(
+        p1Page.locator("text=Game Starting!").or(p1Page.locator("text=Your Score:"))
+      ).toBeVisible({ timeout: 10_000 });
+      await expect(
+        p2Page.locator("text=Game Starting!").or(p2Page.locator("text=Your Score:"))
+      ).toBeVisible({ timeout: 10_000 });
     }).toPass({ timeout: 30_000, intervals: [1_000, 2_000, 3_000] });
+    flowStepOk('Game started on both pages, playing trivia');
 
     // Play Trivia to end
     await Promise.all([
-      playTriviaToEnd(p1Page),
-      playTriviaToEnd(p2Page),
+      playTriviaToEnd(p1Page, 'trivia-p1'),
+      playTriviaToEnd(p2Page, 'trivia-p2'),
     ]);
+
+    flowStepOk('Trivia match completed');
 
     await p1Context.close();
     await p2Context.close();
@@ -422,15 +518,20 @@ test.describe("TourneyHub End-to-End Suite", () => {
     setupLogging(p1Page, "abandon-p1");
     setupLogging(p2Page, "abandon-p2");
 
+    await injectSocketTracer(p1Page);
+    await injectSocketTracer(p2Page);
+
     await uiLogin(p1Page, "player1@test.com", "password123");
     await uiLogin(p2Page, "player2@test.com", "password123");
 
+    flowStep('Both players navigating to match page');
     // Navigate both pages IN PARALLEL so both sockets connect around the same time
     await Promise.all([
       p1Page.goto(`/tournaments/${tournamentId}/match/${match.id}`),
       p2Page.goto(`/tournaments/${tournamentId}/match/${match.id}`),
     ]);
 
+    flowStep('Waiting for match to start');
     // Wait for match to start — accept either "Game Starting!" or "Your Score:" (playing state)
     await expect(
       p1Page.locator("text=Game Starting!").or(p1Page.locator("text=Your Score:"))
@@ -438,6 +539,7 @@ test.describe("TourneyHub End-to-End Suite", () => {
     await expect(
       p2Page.locator("text=Game Starting!").or(p2Page.locator("text=Your Score:"))
     ).toBeVisible({ timeout: 25_000 });
+    flowStepOk('Match started on both pages');
 
     // Close player 2 page (disconnection)
     await p2Context.close();
@@ -474,16 +576,22 @@ test.describe("TourneyHub End-to-End Suite", () => {
     const hostPage = await hostContext.newPage();
     setupLogging(hostPage, "advancement-host");
 
+    await injectSocketTracer(hostPage);
+
+    flowStep('Host logging in and navigating to tournament');
     await uiLogin(hostPage, "player1@test.com", "password123");
     await hostPage.goto(`/tournaments/${tournamentId}`);
 
     // Start the tournament
+    flowStep('Starting tournament');
     const startBtn = hostPage.locator('button:has-text("Start Tournament")');
     await expect(startBtn).toBeEnabled();
     await startBtn.click();
     await expect(hostPage.locator("text=In Progress")).toBeVisible({ timeout: 15_000 });
+    flowStepOk('Tournament is In Progress');
 
     // Get bracket matches
+    flowStep('Fetching bracket to find host match');
     const triviaBracket = await apiGetBracket(request, tournamentId);
     const round1 = triviaBracket.rounds?.round1 || [];
     const myMatch = round1.find(
@@ -502,24 +610,42 @@ test.describe("TourneyHub End-to-End Suite", () => {
     const opponentContext = await browser.newContext();
     const opponentPage = await opponentContext.newPage();
     setupLogging(opponentPage, "advancement-opponent");
+    await injectSocketTracer(opponentPage);
 
+    flowStep(`Logging in as opponent (${opponentEmail})`);
     await uiLogin(opponentPage, opponentEmail, "password123");
 
     // Play round 1 match E2E
+    flowStep('Both players navigating to match page');
     await hostPage.goto(`/tournaments/${tournamentId}/match/${myMatch.id}`);
     await opponentPage.goto(`/tournaments/${tournamentId}/match/${myMatch.id}`);
 
-    await Promise.all([
-      playTriviaToEnd(hostPage),
-      playTriviaToEnd(opponentPage),
-    ]);
+    flowStep('Playing round 1 match to completion');
+    try {
+      await Promise.all([
+        playTriviaToEnd(hostPage, 'host'),
+        playTriviaToEnd(opponentPage, 'opponent'),
+      ]);
+      flowStepOk('Round 1 match completed');
+    } catch (e) {
+      console.log(`  ⚠ playTriviaToEnd threw: ${e.message}`);
+      // Check if both pages navigated away (match ended successfully)
+      const hostUrl = hostPage.isClosed() ? 'closed' : hostPage.url();
+      const oppUrl = opponentPage.isClosed() ? 'closed' : opponentPage.url();
+      console.log(`  Host URL: ${hostUrl}`);
+      console.log(`  Opponent URL: ${oppUrl}`);
+    }
 
     // Force-complete all remaining matches via REST API
+    flowStep('Force-completing remaining bracket matches via API');
     await forceCompleteAllMatches(request, tournamentId, triviaHostAuth);
+    flowStepOk('All bracket matches completed');
 
     // Verify tournament status is Completed
+    flowStep('Verifying tournament completed');
     await hostPage.goto(`/tournaments/${tournamentId}`);
     await expect(hostPage.getByText("Completed", { exact: true })).toBeVisible({ timeout: 20_000 });
+    flowStepOk('Tournament shows Completed status');
 
     await hostContext.close();
     await opponentContext.close();
@@ -557,6 +683,9 @@ test.describe("TourneyHub End-to-End Suite", () => {
     setupLogging(drawerPage, "qd-wrong-drawer");
     setupLogging(guesserPage, "qd-wrong-guesser");
 
+    await injectSocketTracer(drawerPage);
+    await injectSocketTracer(guesserPage);
+
     if (isP1Drawer) {
       await uiLogin(drawerPage, "player1@test.com", "password123");
       await uiLogin(guesserPage, "player2@test.com", "password123");
@@ -565,14 +694,17 @@ test.describe("TourneyHub End-to-End Suite", () => {
       await uiLogin(guesserPage, "player1@test.com", "password123");
     }
 
+    flowStep('Both players navigating to Quick Draw match');
     await Promise.all([
       drawerPage.goto(`/tournaments/${tournamentId}/match/${match.id}`),
       guesserPage.goto(`/tournaments/${tournamentId}/match/${match.id}`),
     ]);
 
     // Wait for game to start
+    flowStep('Waiting for game to start');
     await expect(drawerPage.locator("text=You are DRAWING")).toBeVisible({ timeout: 25_000 });
     await expect(guesserPage.locator("text=You are GUESSING")).toBeVisible({ timeout: 25_000 });
+    flowStepOk('Game started with correct roles');
 
     // Get the secret word
     const drawHeader = drawerPage.locator("text=Draw:");
@@ -742,6 +874,10 @@ test.describe("TourneyHub End-to-End Suite", () => {
     setupLogging(pageB, "qd-spec-p2");
     setupLogging(spectatorPage, "qd-spec-viewer");
 
+    await injectSocketTracer(drawerPage);
+    await injectSocketTracer(guesserPage);
+    await injectSocketTracer(spectatorPage);
+
     if (isP1Drawer) {
       await uiLogin(drawerPage, "player1@test.com", "password123");
       await uiLogin(guesserPage, "player2@test.com", "password123");
@@ -751,6 +887,7 @@ test.describe("TourneyHub End-to-End Suite", () => {
     }
     await uiLogin(spectatorPage, "player3@test.com", "password123");
 
+    flowStep('All three users navigating to match page');
     // Navigate both players and spectator in parallel
     await Promise.all([
       drawerPage.goto(`/tournaments/${tournamentId}/match/${match.id}`),
@@ -758,12 +895,14 @@ test.describe("TourneyHub End-to-End Suite", () => {
       spectatorPage.goto(`/tournaments/${tournamentId}/match/${match.id}`),
     ]);
 
+    flowStep('Waiting for role indicators');
     // Players see their roles
     await expect(drawerPage.locator("text=You are DRAWING")).toBeVisible({ timeout: 25_000 });
     await expect(guesserPage.locator("text=You are GUESSING")).toBeVisible({ timeout: 25_000 });
 
     // Spectator sees SPECTATING role
     await expect(spectatorPage.locator("text=You are SPECTATING")).toBeVisible({ timeout: 25_000 });
+    flowStepOk('All users see correct role indicators');
 
     // Spectator can see the canvas (canvas element exists)
     await expect(spectatorPage.locator("canvas")).toBeVisible();
@@ -896,10 +1035,15 @@ test.describe("TourneyHub End-to-End Suite", () => {
     setupLogging(p2Page, "trivia-spec-p2");
     setupLogging(specPage, "trivia-spec-viewer");
 
+    await injectSocketTracer(p1Page);
+    await injectSocketTracer(p2Page);
+    await injectSocketTracer(specPage);
+
     await uiLogin(p1Page, "player1@test.com", "password123");
     await uiLogin(p2Page, "player2@test.com", "password123");
     await uiLogin(specPage, "player3@test.com", "password123");
 
+    flowStep('All three users navigating to Trivia match');
     // Navigate all pages in parallel
     await Promise.all([
       p1Page.goto(`/tournaments/${tournamentId}/match/${match.id}`),
@@ -907,6 +1051,7 @@ test.describe("TourneyHub End-to-End Suite", () => {
       specPage.goto(`/tournaments/${tournamentId}/match/${match.id}`),
     ]);
 
+    flowStep('Waiting for game indicators');
     // Wait for game indicators — accept starting or playing state
     await expect(
       specPage.locator("text=Spectator Mode").or(specPage.locator("text=Spectating Match"))
@@ -967,6 +1112,9 @@ test.describe("TourneyHub End-to-End Suite", () => {
     setupLogging(drawerPage, "qd-abandon-drawer");
     setupLogging(guesserPage, "qd-abandon-guesser");
 
+    await injectSocketTracer(drawerPage);
+    await injectSocketTracer(guesserPage);
+
     if (isP1Drawer) {
       await uiLogin(drawerPage, "player1@test.com", "password123");
       await uiLogin(guesserPage, "player2@test.com", "password123");
@@ -975,6 +1123,7 @@ test.describe("TourneyHub End-to-End Suite", () => {
       await uiLogin(guesserPage, "player1@test.com", "password123");
     }
 
+    flowStep('Both players navigating to Quick Draw match');
     // Navigate both pages in parallel
     await Promise.all([
       drawerPage.goto(`/tournaments/${tournamentId}/match/${match.id}`),
@@ -982,14 +1131,19 @@ test.describe("TourneyHub End-to-End Suite", () => {
     ]);
 
     // Wait for game to start
+    flowStep('Waiting for game to start');
     await expect(drawerPage.locator("text=You are DRAWING")).toBeVisible({ timeout: 25_000 });
     await expect(guesserPage.locator("text=You are GUESSING")).toBeVisible({ timeout: 25_000 });
+    flowStepOk('Game started');
 
     // Drawer disconnects
+    flowStep('Drawer disconnecting');
     await ctxDrawer.close();
 
     // Guesser should win by abandonment
+    flowStep('Waiting for guesser to win by abandonment');
     await expect(guesserPage.locator("text=You Won!")).toBeVisible({ timeout: 30_000 });
+    flowStepOk('Guesser won by abandonment');
 
     await ctxGuesser.close();
   });

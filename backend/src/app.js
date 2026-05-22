@@ -109,4 +109,50 @@ app.use((req, res) => {
 // Centralized error handler — MUST be LAST
 app.use(errorHandler);
 
+// Debug/memory endpoint for test instrumentation
+// Returns current game state counts for leak detection
+let _ioRef = null;
+export function setDebugIO(io) {
+  _ioRef = io;
+}
+
+// Also expose a global setter for the socket test setup
+if (typeof global !== 'undefined') {
+  global.__setDebugIO = setDebugIO;
+}
+
+app.get('/api/debug/memory', (req, res) => {
+  const memUsage = process.memoryUsage();
+  let socketInfo = { rooms: 0, clients: 0, matchRooms: [] };
+  try {
+    if (_ioRef) {
+      const rooms = _ioRef.sockets?.adapter?.rooms;
+      if (rooms) {
+        socketInfo.rooms = rooms.size;
+        socketInfo.matchRooms = [...rooms.keys()].filter(k => k.startsWith('match_'));
+      }
+      const clients = _ioRef.sockets?.adapter?.sids;
+      if (clients) socketInfo.clients = clients.size;
+    }
+  } catch (e) {
+    socketInfo.error = e.message;
+  }
+
+  res.json({
+    success: true,
+    data: {
+      process: {
+        uptime: Math.floor(process.uptime()) + 's',
+        memory: {
+          heapUsed: Math.round(memUsage.heapUsed / 1024 / 1024) + 'MB',
+          heapTotal: Math.round(memUsage.heapTotal / 1024 / 1024) + 'MB',
+          rss: Math.round(memUsage.rss / 1024 / 1024) + 'MB',
+        },
+      },
+      socket: socketInfo,
+      timestamp: new Date().toISOString(),
+    },
+  });
+});
+
 export default app;
