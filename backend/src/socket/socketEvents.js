@@ -5,9 +5,10 @@ import { TriviaGame } from "../games/TriviaGame.js";
 import { sendMessage } from "../services/chatService.js";
 import { findById } from "../models/User.js";
 import { setSocketIO } from "../services/notificationService.js";
+import jwt from "jsonwebtoken";
 import {
   isBotByEmail, checkBotOpponent, pickBotTriviaAnswer,
-  botQuickDrawGuess, generateBotStroke
+  botQuickDrawGuess, generateBotStroke, createBotDrawState
 } from "../games/BotPlayer.js";
 
 const activeGames = {};
@@ -127,7 +128,7 @@ function setupBotQuickDraw(io, matchId, game, roomName, botPlayerId) {
         return;
       }
       drawCount++;
-      const stroke = generateBotStroke();
+      const stroke = generateBotStroke(game.botDrawState);
       io.to(roomName).emit('receive_stroke', { x: stroke.x, y: stroke.y, type: stroke.type });
     }, 400);
   } else {
@@ -166,8 +167,25 @@ export default function setupSocketEvents(io) {
   // Give the notification service access to io so it can push live notifications
   setSocketIO(io);
 
+  // Authenticate socket connections
+  io.use((socket, next) => {
+    const token = socket.handshake.auth?.token;
+    if (!token) {
+      // Allow unauthenticated connections for now (public quick play)
+      return next();
+    }
+    try {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      socket.data.userId = decoded.userId;
+      next();
+    } catch (err) {
+      console.warn('Socket connection rejected: Invalid token');
+      next(new Error('Authentication error'));
+    }
+  });
+
   io.on("connection", (socket) => {
-    console.log(`📞 User connected: ${socket.id}`);
+    console.log(`📞 User connected: ${socket.id} (Auth: ${socket.data.userId || 'Guest'})`);
 
     // TRIVIA GAME EVENTS
     socket.on("trivia:join", async (data) => {
@@ -384,6 +402,7 @@ export default function setupSocketEvents(io) {
             wrongAttempts: {},
             timeLimit: 60,
             timeRemaining: 60,
+            botDrawState: createBotDrawState(),
           };
         }
 
@@ -611,7 +630,7 @@ export default function setupSocketEvents(io) {
           }
         } else {
           socket.emit("wrong_guess", {
-            message: `Wrong! ${remaining} guess${remaining > 1 ? 'es' : ''} left`,
+            message: `Try again! ${remaining} guess${remaining > 1 ? 'es' : ''} left`,
             attemptsLeft: remaining,
           });
         }
@@ -744,6 +763,12 @@ export default function setupSocketEvents(io) {
       delete chatUsernames[socket.id];
       delete lastChatTime[socket.id];
       delete socketJoinedRooms[socket.id];
+
+      // Clean up announcedChatUsers to prevent memory leak
+      if (socket.data?.playerId) {
+        const pid = Number(socket.data.playerId);
+        Object.values(announcedChatUsers).forEach(set => set.delete(pid));
+      }
 
       // Clean up match waiting state
       if (socket.data?.matchId && socket.data?.playerId) {

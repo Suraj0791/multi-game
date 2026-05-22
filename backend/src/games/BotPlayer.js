@@ -108,19 +108,22 @@ const BOT_SHAPES = {
 };
 
 const SHAPE_NAMES = Object.keys(BOT_SHAPES);
-let _botShapeIdx = 0;
-let _botStrokeInShape = 0;
-let _botCurrentShape = null;
 
-export function generateBotStroke() {
-  if (!_botCurrentShape || _botStrokeInShape >= _botCurrentShape.length) {
-    const name = SHAPE_NAMES[_botShapeIdx % SHAPE_NAMES.length];
-    _botShapeIdx++;
-    _botCurrentShape = BOT_SHAPES[name];
-    _botStrokeInShape = 0;
+// Factory: creates per-game bot draw state (avoids sharing between concurrent games)
+export function createBotDrawState() {
+  return { shapeIdx: 0, strokeInShape: 0, currentShape: null };
+}
+
+export function generateBotStroke(state) {
+  if (!state) state = createBotDrawState();
+  if (!state.currentShape || state.strokeInShape >= state.currentShape.length) {
+    const name = SHAPE_NAMES[state.shapeIdx % SHAPE_NAMES.length];
+    state.shapeIdx++;
+    state.currentShape = BOT_SHAPES[name];
+    state.strokeInShape = 0;
   }
-  const s = _botCurrentShape[_botStrokeInShape];
-  _botStrokeInShape++;
+  const s = state.currentShape[state.strokeInShape];
+  state.strokeInShape++;
   return {
     x: s.x + (Math.random() - 0.5) * 10,
     y: s.y + (Math.random() - 0.5) * 10,

@@ -198,7 +198,7 @@ export default function TriviaGame({ socket, matchId, currentUserId, isSpectator
     setGameStatus('answered')
 
     // Calculate how long the user took (for scoring)
-    const timeTakenMs = Date.now() - questionStartTime
+    const timeTakenMs = Date.now() - questionStart
 
     // EMIT to backend
     socket.emit('trivia:answer', {
@@ -207,7 +207,7 @@ export default function TriviaGame({ socket, matchId, currentUserId, isSpectator
       answer,
       timeTakenMs,
     })
-  }, [gameStatus, selectedAnswer, socket, matchId, currentUserId, questionStartTime])
+  }, [gameStatus, selectedAnswer, socket, matchId, currentUserId, questionStart])
 
   // ============================================================
   // RENDER — different UI for each game state

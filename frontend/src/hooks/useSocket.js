@@ -20,6 +20,17 @@ export default function useSocket() {
         reconnection: true,
         reconnectionAttempts: 5,
         reconnectionDelay: 1000,
+        auth: {
+          token: localStorage.getItem('token'),
+        },
+      });
+
+      // Re-attach token on reconnect (in case user logged in after first connect)
+      globalSocket.on('connect', () => {
+        const currentToken = localStorage.getItem('token');
+        if (currentToken && globalSocket.auth) {
+          globalSocket.auth.token = currentToken;
+        }
       });
     }
     return globalSocket;
