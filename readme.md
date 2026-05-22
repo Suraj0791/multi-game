@@ -31,6 +31,7 @@ A real-time multiplayer gaming and tournament platform built with a modern web s
 ### ⚙️ Backend & Frontend Architecture Deep Dives
 - **Robust Backend Systems Design:** Features PostgreSQL connection pooling, database startup migrations, lazy initialization of payments, and an automated transaction-isolated 24-hour guest cleanup sweeper. *(Read the in-depth backend architecture breakdown in [BACKEND_ENGINE_DEEP_DIVE.md](file:///e:/BACKEND/multi-game/AI_CONTEXT/BACKEND_ENGINE_DEEP_DIVE.md))*
 - **Stateful Client-Side Architecture:** Powered by a lazy-initialized module-level Socket.io singleton, Zustand token state preservation, coordinate-scaled Pictionary Canvas, and connected SVG tournament brackets. *(Read the in-depth frontend architecture breakdown in [FRONTEND_ENGINE_DEEP_DIVE.md](file:///e:/BACKEND/multi-game/AI_CONTEXT/FRONTEND_ENGINE_DEEP_DIVE.md))*
+- **⚔️ Toughest Challenges & Interview Q&A Prep:** Learn about the 5 hardest engineering problems solved in TourneyHub and study 35 interview questions spanning the entire technical stack. *(Read the in-depth guide in [TOUGHEST_CHALLENGES_AND_INTERVIEW_QA.md](file:///e:/BACKEND/multi-game/AI_CONTEXT/TOUGHEST_CHALLENGES_AND_INTERVIEW_QA.md))*
 
 ## 🚀 Tech Stack
 
