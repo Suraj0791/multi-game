@@ -4,15 +4,17 @@
 // Redesigned with a high-fidelity glassmorphic dashboard card,
 // ELO-themed avatar rings, circular win rate dial, and stat counters.
 
-import { useParams } from 'react-router-dom'
+import { useParams, useNavigate } from 'react-router-dom'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { User, Trophy, Target, TrendingUp, Medal, Sparkles, Swords } from 'lucide-react'
 import { useUserProfile } from '@/hooks/useUsers'
 import useAuthStore from '@/stores/authStore'
 
 export default function ProfilePage() {
   const { id } = useParams()
+  const navigate = useNavigate()
   const currentUserId = useAuthStore((state) => state.userId)
   const isOwnProfile = Number(id) === Number(currentUserId)
 
@@ -73,6 +75,46 @@ export default function ProfilePage() {
   const strokeWidth = 6
   const circumference = 2 * Math.PI * radius
   const strokeDashoffset = circumference - (winRate / 100) * circumference
+
+  if (user?.isGuest) {
+    return (
+      <div className="max-w-2xl mx-auto space-y-6 px-2">
+        <Card className="border border-dashed border-border/40 bg-surface/20 backdrop-blur-md overflow-hidden relative shadow-xl">
+          <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-amber-600 via-amber-500 to-amber-700" />
+          <CardContent className="p-8 text-center flex flex-col items-center gap-6">
+            
+            {/* Avatar Ring */}
+            <div className="relative">
+              <div className="w-24 h-24 rounded-full bg-gradient-to-br from-neutral-800 to-neutral-900 flex items-center justify-center font-extrabold text-2xl md:text-3xl text-neutral-400 border-4 border-dashed border-neutral-700 transition-all duration-300 hover:scale-105">
+                {getInitials(user.username)}
+              </div>
+              <div className="absolute -top-1 -right-1 bg-neutral-800 text-neutral-400 font-bold text-[9px] uppercase tracking-wider rounded-full px-2 py-0.5 border border-neutral-700 shadow-md">
+                Guest
+              </div>
+            </div>
+
+            {/* User Info */}
+            <div className="space-y-2">
+              <h1 className="text-2xl font-bold tracking-tight flex items-center justify-center gap-2">
+                {user.username}
+                <span className="text-xs font-semibold text-amber-500 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">Guest Account</span>
+              </h1>
+              <p className="text-sm text-muted-foreground max-w-md mx-auto leading-relaxed">
+                This is a temporary guest session. Sign up to save your ELO, join tournaments, compete on the leaderboard, and customize your profile!
+              </p>
+            </div>
+
+            <Button 
+              className="mt-2 px-8 py-6 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 font-extrabold text-sm uppercase tracking-wider rounded-xl shadow-lg hover:shadow-amber-500/10 transition-all duration-200 cursor-pointer animate-pulse hover:animate-none hover:scale-[1.03]"
+              onClick={() => navigate('/register')}
+            >
+              <Sparkles className="h-4 w-4 mr-2 fill-slate-950" /> Register Now
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
 
   return (
     <div className="max-w-2xl mx-auto space-y-6 px-2">

@@ -1,6 +1,6 @@
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import { createUser, findByEmail } from '../models/User.js';
+import { createUser, findByEmail, updateLastLogin } from '../models/User.js';
 
 export async function registerUser(username, email, password) {
   // Step 1: Does this email already exist?
@@ -56,7 +56,10 @@ export async function loginUser(email, password) {
     { expiresIn: '7d' }
   );
 
-  // Step 5: Return what the controller needs
+  // Step 5: Update last login time
+  await updateLastLogin(user.id);
+
+  // Step 6: Return what the controller needs
   return { userId: user.id, token };
 }
 
@@ -67,7 +70,7 @@ export async function guestLogin() {
   const randomPassword = Math.random().toString(36).substring(2, 10);
   const hashedPassword = await bcrypt.hash(randomPassword, 10);
 
-  const user = await createUser(username, email, hashedPassword);
+  const user = await createUser(username, email, hashedPassword, true);
 
   const token = jwt.sign(
     { userId: user.id },

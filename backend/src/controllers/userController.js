@@ -28,6 +28,7 @@ export async function fetchUserProfile(req, res) {
     res.status(200).json({
       id: user.id,
       username: user.username,
+      isGuest: user.is_guest || false,
       eloRating: stats?.elo_rating || 1000,
       wins: stats?.total_wins || 0,
       losses: stats?.total_losses || 0,

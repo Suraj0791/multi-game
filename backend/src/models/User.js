@@ -1,9 +1,9 @@
 import { query } from '../config/database.js';
 
-export async function createUser(username, email, hashedPassword) {
+export async function createUser(username, email, hashedPassword, isGuest = false) {
   const result = await query(
-    'INSERT INTO users (username, email, password) VALUES ($1, $2, $3) RETURNING *',
-    [username, email, hashedPassword]
+    'INSERT INTO users (username, email, password, is_guest) VALUES ($1, $2, $3, $4) RETURNING *',
+    [username, email, hashedPassword, isGuest]
   );
   return result.rows[0];
 }
@@ -16,10 +16,10 @@ export async function findByEmail(email) {
   return result.rows[0];
 }
 
-// Look up a user by ID — used by chat to get username
+// Look up a user by ID — used by chat and profile page
 export async function findById(id) {
   const result = await query(
-    'SELECT id, username FROM users WHERE id = $1',
+    'SELECT id, username, is_guest FROM users WHERE id = $1',
     [id]
   );
   return result.rows[0];
@@ -60,4 +60,12 @@ export async function getTopPlayers(limit = 10) {
     [limit]
   );
   return result.rows;
+}
+
+export async function updateLastLogin(userId) {
+  const result = await query(
+    'UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = $1 RETURNING last_login',
+    [userId]
+  );
+  return result.rows[0];
 }
