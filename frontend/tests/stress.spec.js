@@ -23,15 +23,30 @@ function setupLogging(page, name) {
   });
 }
 
-test.afterEach(async ({ page }, testInfo) => {
-  if (testInfo.status !== 'passed' && page) {
+test.afterEach(async ({ browser }, testInfo) => {
+  if (testInfo.status !== 'passed') {
     try {
       console.log(`\n  🔍 Test FAILED: ${testInfo.title}`);
-      await dumpSocketEvents(page, 'Socket Events at Failure');
-      await dumpState(page);
-      await captureFailureContext(page, testInfo.title, {
-        error: testInfo.error?.message || 'Unknown',
-      });
+      console.log(`  Error: ${testInfo.error?.message || 'Unknown'}`);
+
+      let captured = false;
+      for (const ctx of browser.contexts()) {
+        for (const p of ctx.pages()) {
+          if (!p.isClosed()) {
+            await dumpSocketEvents(p, 'Socket Events at Failure');
+            await dumpState(p);
+            await captureFailureContext(p, testInfo.title, {
+              error: testInfo.error?.message || 'Unknown',
+            });
+            captured = true;
+            break;
+          }
+        }
+        if (captured) break;
+      }
+      if (!captured) {
+        console.log(`  ⚠ No open pages available for failure capture`);
+      }
     } catch (e) {
       console.log(`  ⚠ Failure context capture error: ${e.message}`);
     }

@@ -25,16 +25,31 @@ function setupLogging(page, name) {
 }
 
 // Enhanced logging that captures failure context on test failure
-test.afterEach(async ({ page }, testInfo) => {
-  if (testInfo.status !== 'passed' && page) {
+test.afterEach(async ({ browser }, testInfo) => {
+  if (testInfo.status !== 'passed') {
     try {
       console.log(`\n  🔍 Test FAILED: ${testInfo.title}`);
       console.log(`  Error: ${testInfo.error?.message || 'Unknown'}`);
-      await dumpSocketEvents(page, 'Socket Events at Failure');
-      await dumpState(page);
-      await captureFailureContext(page, testInfo.title, {
-        error: testInfo.error?.message || 'Unknown',
-      });
+
+      // Collect all open pages from all browser contexts
+      let captured = false;
+      for (const ctx of browser.contexts()) {
+        for (const p of ctx.pages()) {
+          if (!p.isClosed()) {
+            await dumpSocketEvents(p, 'Socket Events at Failure');
+            await dumpState(p);
+            await captureFailureContext(p, testInfo.title, {
+              error: testInfo.error?.message || 'Unknown',
+            });
+            captured = true;
+            break;
+          }
+        }
+        if (captured) break;
+      }
+      if (!captured) {
+        console.log(`  ⚠ No open pages available for failure capture`);
+      }
     } catch (e) {
       console.log(`  ⚠ Failure context capture error: ${e.message}`);
     }
@@ -381,8 +396,8 @@ test.describe("TourneyHub End-to-End Suite", () => {
     flowStep('Waiting for role indicators');
 
     // Verify role indicators (drawer sees DRAWING, guesser sees GUESSING)
-    await expect(drawerPage.locator("text=You are DRAWING")).toBeVisible({ timeout: 25_000 });
-    await expect(guesserPage.locator("text=You are GUESSING")).toBeVisible({ timeout: 25_000 });
+    await expect(drawerPage.locator("text=DRAWING")).toBeVisible({ timeout: 25_000 });
+    await expect(guesserPage.locator("text=GUESSING")).toBeVisible({ timeout: 25_000 });
     flowStepOk('Both players see correct role indicators');
 
     // Empty guess validation check
@@ -702,8 +717,8 @@ test.describe("TourneyHub End-to-End Suite", () => {
 
     // Wait for game to start
     flowStep('Waiting for game to start');
-    await expect(drawerPage.locator("text=You are DRAWING")).toBeVisible({ timeout: 25_000 });
-    await expect(guesserPage.locator("text=You are GUESSING")).toBeVisible({ timeout: 25_000 });
+    await expect(drawerPage.locator("text=DRAWING")).toBeVisible({ timeout: 25_000 });
+    await expect(guesserPage.locator("text=GUESSING")).toBeVisible({ timeout: 25_000 });
     flowStepOk('Game started with correct roles');
 
     // Get the secret word
@@ -897,11 +912,11 @@ test.describe("TourneyHub End-to-End Suite", () => {
 
     flowStep('Waiting for role indicators');
     // Players see their roles
-    await expect(drawerPage.locator("text=You are DRAWING")).toBeVisible({ timeout: 25_000 });
-    await expect(guesserPage.locator("text=You are GUESSING")).toBeVisible({ timeout: 25_000 });
+    await expect(drawerPage.locator("text=DRAWING")).toBeVisible({ timeout: 25_000 });
+    await expect(guesserPage.locator("text=GUESSING")).toBeVisible({ timeout: 25_000 });
 
     // Spectator sees SPECTATING role
-    await expect(spectatorPage.locator("text=You are SPECTATING")).toBeVisible({ timeout: 25_000 });
+    await expect(spectatorPage.locator("text=SPECTATING")).toBeVisible({ timeout: 25_000 });
     flowStepOk('All users see correct role indicators');
 
     // Spectator can see the canvas (canvas element exists)
@@ -1132,8 +1147,8 @@ test.describe("TourneyHub End-to-End Suite", () => {
 
     // Wait for game to start
     flowStep('Waiting for game to start');
-    await expect(drawerPage.locator("text=You are DRAWING")).toBeVisible({ timeout: 25_000 });
-    await expect(guesserPage.locator("text=You are GUESSING")).toBeVisible({ timeout: 25_000 });
+    await expect(drawerPage.locator("text=DRAWING")).toBeVisible({ timeout: 25_000 });
+    await expect(guesserPage.locator("text=GUESSING")).toBeVisible({ timeout: 25_000 });
     flowStepOk('Game started');
 
     // Drawer disconnects

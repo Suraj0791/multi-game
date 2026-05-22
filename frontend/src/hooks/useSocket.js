@@ -32,6 +32,41 @@ export default function useSocket() {
           globalSocket.auth.token = currentToken;
         }
       });
+
+      // Socket event tracing for E2E tests — logs to window.__socketEvents
+      try {
+        function safeCloneTrace(obj) {
+          try { return JSON.parse(JSON.stringify(obj)); }
+          catch { return String(obj); }
+        }
+        if (typeof window !== 'undefined' && window.__socketTracerInstalled) {
+          globalSocket.onAny((event, ...args) => {
+            if (!window.__socketEvents) window.__socketEvents = [];
+            window.__socketEvents.push({
+              timestamp: Date.now(),
+              direction: 'RECEIVE',
+              event: event,
+              payload: safeCloneTrace(args)
+            });
+            if (window.__socketEvents.length > (window.__socketEventLimit || 200)) window.__socketEvents.shift();
+          });
+          var origEmit = globalSocket.emit;
+          globalSocket.emit = function(ev) {
+            var args = Array.prototype.slice.call(arguments, 1);
+            if (!window.__socketEvents) window.__socketEvents = [];
+            window.__socketEvents.push({
+              timestamp: Date.now(),
+              direction: 'EMIT',
+              event: ev,
+              payload: safeCloneTrace(args)
+            });
+            if (window.__socketEvents.length > (window.__socketEventLimit || 200)) window.__socketEvents.shift();
+            return origEmit.apply(this, arguments);
+          };
+        }
+      } catch(e) {
+        // tracer logging is best-effort
+      }
     }
     return globalSocket;
   });

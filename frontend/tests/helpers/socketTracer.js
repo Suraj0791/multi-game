@@ -1,52 +1,57 @@
 const MAX_EVENTS = 200;
 
+function safeClone(obj) {
+  try { return JSON.parse(JSON.stringify(obj)); }
+  catch { return String(obj); }
+}
+
 export const SOCKET_TRACER_SCRIPT = `
 (function() {
   if (window.__socketTracerInstalled) return;
   window.__socketTracerInstalled = true;
   window.__socketEvents = [];
-
-  const origAddEventListener = EventTarget.prototype.addEventListener;
-  EventTarget.prototype.addEventListener = function(type, listener, options) {
-    if (this.io && (type === 'connect' || type === 'event')) {
-      // Socket.io internal — skip
-    }
-    return origAddEventListener.call(this, type, listener, options);
-  };
-
-  const origEmit = io.Socket.prototype.emit;
-  if (origEmit) {
-    io.Socket.prototype.emit = function(ev, ...args) {
-      window.__socketEvents.push({
-        timestamp: Date.now(),
-        direction: 'EMIT',
-        event: ev,
-        payload: safeClone(args)
-      });
-      if (window.__socketEvents.length > ${MAX_EVENTS}) window.__socketEvents.shift();
-      return origEmit.call(this, ev, ...args);
-    };
-  }
-
-  const origOnevent = io.Socket.prototype.onevent;
-  if (origOnevent) {
-    io.Socket.prototype.onevent = function(packet) {
-      if (packet && packet.data) {
-        window.__socketEvents.push({
-          timestamp: Date.now(),
-          direction: 'RECEIVE',
-          event: packet.data[0],
-          payload: safeClone(packet.data.slice(1))
-        });
-        if (window.__socketEvents.length > ${MAX_EVENTS}) window.__socketEvents.shift();
-      }
-      return origOnevent.call(this, packet);
-    };
-  }
+  window.__socketEventLimit = ${MAX_EVENTS};
 
   function safeClone(obj) {
     try { return JSON.parse(JSON.stringify(obj)); }
     catch { return String(obj); }
+  }
+
+  try {
+    if (typeof io !== 'undefined' && io && io.Socket && io.Socket.prototype) {
+      var origEmit = io.Socket.prototype.emit;
+      if (origEmit) {
+        io.Socket.prototype.emit = function(ev) {
+          var args = Array.prototype.slice.call(arguments, 1);
+          window.__socketEvents.push({
+            timestamp: Date.now(),
+            direction: 'EMIT',
+            event: ev,
+            payload: safeClone(args)
+          });
+          if (window.__socketEvents.length > window.__socketEventLimit) window.__socketEvents.shift();
+          return origEmit.apply(this, arguments);
+        };
+      }
+
+      var origOnevent = io.Socket.prototype.onevent;
+      if (origOnevent) {
+        io.Socket.prototype.onevent = function(packet) {
+          if (packet && packet.data) {
+            window.__socketEvents.push({
+              timestamp: Date.now(),
+              direction: 'RECEIVE',
+              event: packet.data[0],
+              payload: safeClone(packet.data.slice(1))
+            });
+            if (window.__socketEvents.length > window.__socketEventLimit) window.__socketEvents.shift();
+          }
+          return origOnevent.call(this, packet);
+        };
+      }
+    }
+  } catch(e) {
+    // socket.io not available as global in Vite/ESM — app-side logging handles it
   }
 })();
 `;
