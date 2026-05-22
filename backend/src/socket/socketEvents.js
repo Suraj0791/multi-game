@@ -124,10 +124,20 @@ export default function setupSocketEvents(io) {
               match.player_2_id
             );
             activeTriviaGames[matchId].joinedPlayerIds = new Set();
+            activeTriviaGames[matchId].connectedSockets = {};
             activeTriviaGames[matchId].hasStarted = false;
           }
 
           const game = activeTriviaGames[matchId];
+          if (game.cleanupTimeoutId) {
+            clearTimeout(game.cleanupTimeoutId);
+            game.cleanupTimeoutId = null;
+          }
+          if (!game.connectedSockets) game.connectedSockets = {};
+          if (!game.connectedSockets[numericPlayerId]) {
+            game.connectedSockets[numericPlayerId] = new Set();
+          }
+          game.connectedSockets[numericPlayerId].add(socket.id);
           game.joinedPlayerIds.add(numericPlayerId);
 
 
@@ -152,13 +162,18 @@ export default function setupSocketEvents(io) {
                 sendNextTriviaQuestion(io, matchId, match.player_1_id, match.player_2_id);
               }, 3000);
             } else {
+              // 🔴 KILL ANY GHOST TIMERS BEFORE STARTING A NEW ONE
+              if (game.waitingTimeoutId) {
+                clearTimeout(game.waitingTimeoutId);
+              }
+
               game.waitingTimeoutId = setTimeout(() => {
                 const rName = `match_${matchId}`;
                 io.to(rName).emit("error", {
                   message: "Match cancelled: Opponent didn't join in time"
                 });
                 delete activeTriviaGames[matchId];
-              }, 30000);
+              }, 60000); // 🟢 Increased to 60 seconds!
 
               socket.emit("trivia:waiting", { message: "Waiting for opponent..." });
             }
@@ -271,6 +286,7 @@ export default function setupSocketEvents(io) {
               drawerId: match.player_1_id,
               strokes: [],
               joinedPlayerIds: new Set(),
+              connectedSockets: {},
               hasStarted: false,
               maxAttempts: 5,
               wrongAttempts: {},
@@ -280,6 +296,15 @@ export default function setupSocketEvents(io) {
           }
 
           const game = activeGames[matchId];
+          if (game.cleanupTimeoutId) {
+            clearTimeout(game.cleanupTimeoutId);
+            game.cleanupTimeoutId = null;
+          }
+          if (!game.connectedSockets) game.connectedSockets = {};
+          if (!game.connectedSockets[numericPlayerId]) {
+            game.connectedSockets[numericPlayerId] = new Set();
+          }
+          game.connectedSockets[numericPlayerId].add(socket.id);
           game.joinedPlayerIds.add(numericPlayerId);
 
 
@@ -332,13 +357,18 @@ export default function setupSocketEvents(io) {
 
 
             } else {
+              // 🔴 KILL ANY GHOST TIMERS BEFORE STARTING A NEW ONE
+              if (game.waitingTimeoutId) {
+                clearTimeout(game.waitingTimeoutId);
+              }
+
               game.waitingTimeoutId = setTimeout(() => {
                 const rName = `match_${matchId}`;
                 io.to(rName).emit("error", {
                   message: "Match cancelled: Opponent didn't join in time"
                 });
                 delete activeGames[matchId];
-              }, 30000);
+              }, 60000); // 🟢 Increased to 60 seconds!
 
               socket.emit("game_status_waiting", { message: "Waiting for opponent..." });
             }
@@ -549,12 +579,26 @@ export default function setupSocketEvents(io) {
         // TRIVIA CLEANUP
         const triviaGame = activeTriviaGames[matchId];
         if (triviaGame) {
-          triviaGame.joinedPlayerIds.delete(playerId);
-          if (triviaGame.joinedPlayerIds.size === 0) {
-            if (triviaGame.timeoutId) clearTimeout(triviaGame.timeoutId);
-            if (triviaGame.waitingTimeoutId) clearTimeout(triviaGame.waitingTimeoutId);
+          if (triviaGame.connectedSockets && triviaGame.connectedSockets[playerId]) {
+            triviaGame.connectedSockets[playerId].delete(socket.id);
+            if (triviaGame.connectedSockets[playerId].size === 0) {
+              delete triviaGame.connectedSockets[playerId];
+              triviaGame.joinedPlayerIds.delete(playerId);
+            }
+          } else {
+            triviaGame.joinedPlayerIds.delete(playerId);
+          }
 
-            delete activeTriviaGames[matchId];
+          if (triviaGame.joinedPlayerIds.size === 0) {
+            if (!triviaGame.cleanupTimeoutId) {
+              triviaGame.cleanupTimeoutId = setTimeout(() => {
+                if (activeTriviaGames[matchId]) {
+                  if (triviaGame.timeoutId) clearTimeout(triviaGame.timeoutId);
+                  if (triviaGame.waitingTimeoutId) clearTimeout(triviaGame.waitingTimeoutId);
+                  delete activeTriviaGames[matchId];
+                }
+              }, 10000); // 10 second grace period
+            }
           }
           // BUG FIX 2: Removed instantaneous auto-forfeit to survive React Strict Mode disconnects!
         }
@@ -562,14 +606,29 @@ export default function setupSocketEvents(io) {
         // QUICK DRAW CLEANUP
         const quickDrawGame = activeGames[matchId];
         if (quickDrawGame) {
-          quickDrawGame.joinedPlayerIds.delete(playerId);
-          if (quickDrawGame.joinedPlayerIds.size === 0) {
-            if (quickDrawGame.timerInterval) clearInterval(quickDrawGame.timerInterval);
-            if (quickDrawGame.waitingTimeoutId) {
-              clearTimeout(quickDrawGame.waitingTimeoutId);
-              quickDrawGame.waitingTimeoutId = null;
+          if (quickDrawGame.connectedSockets && quickDrawGame.connectedSockets[playerId]) {
+            quickDrawGame.connectedSockets[playerId].delete(socket.id);
+            if (quickDrawGame.connectedSockets[playerId].size === 0) {
+              delete quickDrawGame.connectedSockets[playerId];
+              quickDrawGame.joinedPlayerIds.delete(playerId);
             }
-            delete activeGames[matchId];
+          } else {
+            quickDrawGame.joinedPlayerIds.delete(playerId);
+          }
+
+          if (quickDrawGame.joinedPlayerIds.size === 0) {
+            if (!quickDrawGame.cleanupTimeoutId) {
+              quickDrawGame.cleanupTimeoutId = setTimeout(() => {
+                if (activeGames[matchId]) {
+                  if (quickDrawGame.timerInterval) clearInterval(quickDrawGame.timerInterval);
+                  if (quickDrawGame.waitingTimeoutId) {
+                    clearTimeout(quickDrawGame.waitingTimeoutId);
+                    quickDrawGame.waitingTimeoutId = null;
+                  }
+                  delete activeGames[matchId];
+                }
+              }, 10000); // 10 second grace period
+            }
           }
           // BUG FIX 2: Removed instantaneous auto-forfeit here too!
         }
