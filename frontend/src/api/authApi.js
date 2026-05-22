@@ -1,7 +1,3 @@
-// AUTH API — HTTP calls for login and register
-// Backend parallel: This is like a Model file. It ONLY does the network call.
-// No React, no state, no UI. Just sends data and returns the response.
-
 import api from './axiosClient'
 
 // POST /auth/register → { userId, token, message }

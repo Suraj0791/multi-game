@@ -1,5 +1,3 @@
-// REGISTER PAGE — Same pattern as LoginPage
-// Only difference: one extra field (username) + calls registerUser instead of loginUser
 
 import { useState } from 'react'
 import { useForm } from 'react-hook-form'

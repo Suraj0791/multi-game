@@ -1,23 +1,4 @@
-// ============================================================
-// TOURNAMENTS PAGE — Smart Component
-// ============================================================
-// This is the SMART component. It:
-//   1. FETCHES tournament data (via useTournaments hook → React Query)
-//   2. OWNS UI state (search term, status filter)
-//   3. COMPUTES derived state (filtered list)
-//   4. PASSES data down to dumb children (TournamentCard)
-//
-// MENTAL MODEL:
-//   This page is the CONTROLLER.
-//   useTournaments hook is the SERVICE.
-//   tournamentApi.js is the MODEL.
-//   TournamentCard is the VIEW (just renders what it's given).
-//
-// STATE MAP:
-//   tournaments    → SERVER STATE (useQuery via useTournaments)
-//   searchTerm     → UI STATE (useState — tracks what user types)
-//   statusFilter   → UI STATE (useState — tracks which filter is active)
-//   filtered       → DERIVED (computed every render, NOT stored)
+
 
 import { useState } from 'react'
 import { Link } from 'react-router-dom'

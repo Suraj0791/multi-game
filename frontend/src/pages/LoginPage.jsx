@@ -1,27 +1,3 @@
-// ============================================================
-// STEP 3: WIRE THE API — The form now talks to the backend
-// ============================================================
-// WHAT CHANGED from Step 2:
-//   1. Imported loginUser (the HTTP call from authApi.js)
-//   2. Imported useAuthStore (to save the token)
-//   3. Imported useNavigate (to redirect after login)
-//   4. onSubmit now calls the REAL API instead of console.log
-//
-// THE FLOW:
-//   User clicks "Sign in"
-//   → handleSubmit validates (fields not empty?)
-//   → onSubmit runs
-//   → loginUser(email, password) sends POST /auth/login
-//   → Backend responds with { userId, token }
-//   → authStore.login(token, userId) saves to Zustand + localStorage
-//   → navigate('/tournaments') redirects to the app
-//   → ProtectedRoute re-checks → token exists → shows the page
-//
-// IF IT FAILS:
-//   → catch block catches the error
-//   → setError shows the message ("Invalid credentials")
-//   → User sees red error box, can try again
-
 import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'

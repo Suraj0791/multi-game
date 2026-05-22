@@ -1,21 +1,3 @@
-// ============================================================
-// AUTH STORE — Zustand global state
-// ============================================================
-//
-// This is the frontend equivalent of req.user in Express.
-// When a user logs in, we save their token + userId here.
-// Any component in the app can read this to check "am I logged in?"
-//
-// WHY Zustand and not Redux?
-// Zustand is 1 file. Redux is 5 files + 3 concepts (actions, reducers, dispatch).
-// For storing just a token and userId, Zustand is the right tool.
-//
-// WHY not just useState in App.jsx?
-// Because deeply nested components (like Navbar → UserMenu) would need
-// the token passed down through 5 levels of props. Zustand lets ANY
-// component grab the auth state directly without prop drilling.
-// ============================================================
-
 import { create } from 'zustand'
 
 const useAuthStore = create((set) => ({

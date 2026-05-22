@@ -1,12 +1,3 @@
-// ============================================================
-// TOURNAMENT API — HTTP calls for tournament data
-// ============================================================
-// Same pattern as authApi.js — pure HTTP, no React, no state.
-//
-// IMPORTANT: These functions return the DATA, not the axios response.
-// We do response.data here so the components get clean data.
-// Our backend wraps everything in { success: true, data: ... }
-
 import api from "./axiosClient";
 
 // GET /tournaments → array of tournament objects

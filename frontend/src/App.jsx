@@ -1,26 +1,3 @@
-// ============================================================
-// APP.JSX — The Root Component (The Router)
-// ============================================================
-//
-// This is the ENTRY POINT of the entire frontend.
-// It does ONE thing: map URLs to Page components.
-//
-// BACKEND PARALLEL:
-//   app.js in your backend has app.use('/auth', authRoutes)
-//   This file has <Route path="/login" element={<LoginPage />} />
-//   Same concept. URL comes in → matched component renders.
-//
-// STRUCTURE:
-//   BrowserRouter → wraps everything, enables URL-based routing
-//     Routes → the switch statement (first match wins)
-//       Route → individual URL → Component mapping
-//
-// PROTECTED vs PUBLIC:
-//   - PublicRoute wraps login/register (redirects to app if already logged in)
-//   - ProtectedRoute wraps everything else (redirects to login if NOT logged in)
-//   - Layout wraps all protected pages (adds Navbar + consistent page wrapper)
-// ============================================================
-
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 

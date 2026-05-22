@@ -1,15 +1,3 @@
-// ============================================================
-// AXIOS CLIENT — Base HTTP client for talking to our backend
-// ============================================================
-// Backend parallel: This is like database.js (connection pool).
-// database.js creates ONE pool shared by all models.
-// axiosClient creates ONE axios instance shared by all API files.
-//
-// KEY FEATURE: Interceptors
-// - Request interceptor: auto-attaches JWT token to every request
-// - Response interceptor: auto-logouts if backend returns 401
-// ============================================================
-
 import axios from 'axios'
 
 const api = axios.create({

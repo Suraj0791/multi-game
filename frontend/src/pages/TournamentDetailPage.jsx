@@ -1,22 +1,8 @@
 // ============================================================
-// TOURNAMENT DETAIL PAGE — The Smart Component
+// TOURNAMENT DETAIL PAGE
 // ============================================================
-// This is the most complex page in the app.
-// It fetches 3 data sources, computes derived state,
-// and passes everything to dumb children.
-//
-// DATA SOURCES:
-//   1. tournament   → useQuery via useTournament(id)
-//   2. players      → useQuery via usePlayers(id)
-//   3. bracket      → useQuery via useBracket(id)
-//
-// DERIVED STATE (computed from the above):
-//   isHost, hasJoined, canJoin, canLeave, canStart, showBracket
-//
-// MUTATIONS:
-//   joinMutation, leaveMutation, startMutation
 
-import { useParams } from 'react-router-dom'
+import { useParams, useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { useTournament } from '@/hooks/useTournaments'
 import { usePlayers, useJoinTournament, useLeaveTournament, useStartTournament, useBracket } from '@/hooks/usePlayers'

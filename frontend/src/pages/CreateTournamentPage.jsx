@@ -1,17 +1,4 @@
-// ============================================================
-// CREATE TOURNAMENT PAGE
-// ============================================================
-// Pattern: Same as Login (form → submit → API → redirect)
-// New concept: useMutation for cache invalidation
-//
-// THE FLOW:
-//   User fills form → clicks submit
-//   → handleSubmit validates
-//   → onSubmit calls mutateAsync (sends POST /tournaments)
-//   → Backend creates tournament, returns { tournamentId }
-//   → useMutation's onSuccess invalidates ['tournaments'] cache
-//   → navigate to /tournaments/:newId
-//   → Tournament list will auto-refetch next time user visits it
+
 
 import { useState } from 'react'
 import { useForm } from 'react-hook-form'
@@ -24,7 +11,6 @@ import { useCreateTournament } from '@/hooks/useTournaments'
 export default function CreateTournamentPage() {
   const navigate = useNavigate()
 
-  // useMutation hook — handles POST + cache invalidation
   const createMutation = useCreateTournament()
 
   const {
@@ -46,8 +32,7 @@ export default function CreateTournamentPage() {
   const onSubmit = async (data) => {
     setError(null)
     try {
-      // mutateAsync returns a promise (unlike mutate which is fire-and-forget)
-      // We use mutateAsync so we can AWAIT the result and get the tournament ID
+
       const response = await createMutation.mutateAsync({
         name: data.name,
         game_type: data.game_type,
@@ -55,7 +40,6 @@ export default function CreateTournamentPage() {
         entry_fee: Number(data.entry_fee),
       })
 
-      // Redirect to the newly created tournament's detail page
       navigate(`/tournaments/${response.tournamentId}`, { replace: true })
     } catch (err) {
       setError(err.response?.data?.error || err.message || 'Failed to create tournament.')

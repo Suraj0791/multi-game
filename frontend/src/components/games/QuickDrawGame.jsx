@@ -1,34 +1,3 @@
-// ============================================================
-// QUICK DRAW GAME — Real-time drawing + guessing
-// ============================================================
-//
-// HOW IT WORKS:
-//   Both players see a canvas.
-//   Player 1 (drawer) draws the secret word.
-//   Player 2 (guesser) watches strokes appear and types guesses.
-//   First correct guess wins the match.
-//
-// CANVAS BASICS:
-//   HTML <canvas> is a bitmap drawing surface.
-//   You get a "context" (ctx) and call methods like:
-//     ctx.beginPath()     → start a new line
-//     ctx.moveTo(x, y)   → move pen to position (without drawing)
-//     ctx.lineTo(x, y)   → draw a line to position
-//     ctx.stroke()        → render the line
-//
-//   Mouse events on canvas give us coordinates:
-//     onMouseDown → start drawing (pen down)
-//     onMouseMove → continue drawing (pen moves)
-//     onMouseUp   → stop drawing (pen up)
-//
-// SOCKET EVENTS (matched to backend):
-//   EMIT: join_match     → { matchId }
-//   EMIT: draw_stroke    → { matchId, x, y, type: 'start'|'draw' }
-//   EMIT: submit_guess   → { matchId, guess, playerId }
-//   ON:   game_status    → { message, wordToDraw? }
-//   ON:   receive_stroke → { x, y, type }
-//   ON:   wrong_guess    → { message: "Try again!" }
-//   ON:   match_over
 import { useState, useEffect, useRef, useCallback } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
