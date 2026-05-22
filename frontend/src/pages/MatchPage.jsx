@@ -184,6 +184,8 @@ export default function MatchPage() {
 
   // --- WAITING ROOM UI ---
   if (matchId === "waiting") {
+    const isHost = tournament && Number(tournament.hostId) === Number(userId);
+
     return (
       <div className="max-w-6xl mx-auto px-4 py-8 space-y-6">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-stretch">
@@ -202,44 +204,72 @@ export default function MatchPage() {
                 </div>
               </div>
 
-              <div className="space-y-2">
-                <h2 className="text-3xl font-black tracking-tight text-neutral-100 uppercase">
-                  Waiting for Opponent
-                </h2>
-                <p className="text-neutral-400 text-sm max-w-md">
-                  Copy this private invite link and open it in an <strong className="text-amber-400 font-bold">Incognito window</strong> to play against yourself!
-                </p>
-              </div>
+              {isHost ? (
+                <>
+                  {/* HOST VIEW — show invite link */}
+                  <div className="space-y-2">
+                    <h2 className="text-3xl font-black tracking-tight text-neutral-100 uppercase">
+                      Waiting for Opponent
+                    </h2>
+                    <p className="text-neutral-400 text-sm max-w-md">
+                      Copy this private invite link and open it in an <strong className="text-amber-400 font-bold">Incognito window</strong> to play against yourself!
+                    </p>
+                  </div>
 
-              {/* Copy Invite Link Input */}
-              <div className="w-full max-w-md bg-neutral-900/80 border border-neutral-800 p-4 rounded-xl space-y-3">
-                <div className="flex items-center justify-between gap-3 bg-neutral-950 p-3 rounded-lg border border-neutral-800/80">
-                  <code className="text-xs text-amber-400 font-mono select-all truncate flex-1 text-left">
-                    {inviteLink}
-                  </code>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={handleCopy}
-                    className="h-8 w-8 p-0 shrink-0 hover:bg-neutral-850 text-amber-400"
-                  >
-                    {copied ? <Check className="h-4 w-4 text-emerald-400" /> : <Copy className="h-4 w-4" />}
-                  </Button>
-                </div>
+                  {/* Copy Invite Link Input */}
+                  <div className="w-full max-w-md bg-neutral-900/80 border border-neutral-800 p-4 rounded-xl space-y-3">
+                    <div className="flex items-center justify-between gap-3 bg-neutral-950 p-3 rounded-lg border border-neutral-800/80">
+                      <code className="text-xs text-amber-400 font-mono select-all truncate flex-1 text-left">
+                        {inviteLink}
+                      </code>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={handleCopy}
+                        className="h-8 w-8 p-0 shrink-0 hover:bg-neutral-850 text-amber-400"
+                      >
+                        {copied ? <Check className="h-4 w-4 text-emerald-400" /> : <Copy className="h-4 w-4" />}
+                      </Button>
+                    </div>
 
-                <div className="flex items-center justify-center gap-2 text-xs text-neutral-500">
-                  <span className="h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
-                  <span>The game starts automatically when the opponent joins</span>
-                </div>
-              </div>
+                    <div className="flex items-center justify-center gap-2 text-xs text-neutral-500">
+                      <span className="h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
+                      <span>The game starts automatically when the opponent joins</span>
+                    </div>
+                  </div>
 
-              {/* Loader Status */}
-              <div className="flex items-center gap-2.5 px-4 py-2 bg-neutral-900/40 border border-neutral-800/50 rounded-full">
-                <Loader2 className="h-4 w-4 text-amber-500 animate-spin" />
-                <span className="text-xs font-semibold text-neutral-400 tracking-wide uppercase">
-                  {joining ? "Registering you in lobby..." : "Waiting for player 2..."}
-                </span>
-              </div>
+                  {/* Loader Status */}
+                  <div className="flex items-center gap-2.5 px-4 py-2 bg-neutral-900/40 border border-neutral-800/50 rounded-full">
+                    <Loader2 className="h-4 w-4 text-amber-500 animate-spin" />
+                    <span className="text-xs font-semibold text-neutral-400 tracking-wide uppercase">
+                      Waiting for opponent to join...
+                    </span>
+                  </div>
+                </>
+              ) : (
+                <>
+                  {/* JOINER VIEW — show connecting status */}
+                  <div className="space-y-2">
+                    <h2 className="text-3xl font-black tracking-tight text-neutral-100 uppercase">
+                      {joining ? "Joining Match" : "Connected!"}
+                    </h2>
+                    <p className="text-neutral-400 text-sm max-w-md">
+                      {joining
+                        ? "Setting up your guest account and joining the lobby..."
+                        : "You're in! The match will start any moment now."
+                      }
+                    </p>
+                  </div>
+
+                  {/* Loader Status */}
+                  <div className="flex items-center gap-2.5 px-4 py-2 bg-neutral-900/40 border border-neutral-800/50 rounded-full">
+                    <Loader2 className="h-4 w-4 text-emerald-500 animate-spin" />
+                    <span className="text-xs font-semibold text-neutral-400 tracking-wide uppercase">
+                      {joining ? "Registering you in lobby..." : "Starting match..."}
+                    </span>
+                  </div>
+                </>
+              )}
             </CardContent>
           </Card>
 
