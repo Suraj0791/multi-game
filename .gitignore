@@ -20,3 +20,6 @@ screenshots/
 
 # Optional
 playwright/.cache/
+
+# Custom Test Output
+test-artifacts/

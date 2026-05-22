@@ -6,6 +6,10 @@ export default {
   testMatch: [
     '**/tests/**/*.test.js'
   ],
+  // Exclude socket tests (uses vitest, not jest)
+  testPathIgnorePatterns: [
+    '/tests/socket.test.js'
+  ],
 
   // Load .env before tests run
   setupFiles: ['./tests/setup.js'],
