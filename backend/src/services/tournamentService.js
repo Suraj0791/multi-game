@@ -200,9 +200,11 @@ export async function createDemoTournament(hostId) {
 
   const tournament = await insertTournament(name, gameType, maxPlayers, entryFee, hostId);
 
+  // Add Host
   await addPlayer(tournament.id, hostId);
   await updatePlayerPaymentStatus(tournament.id, hostId, 'COMPLETED');
 
+  // Add Bots
   const bots = await Promise.all(BOT_CREDENTIALS.map(getOrCreateBotUser));
   for (const bot of bots) {
     await addPlayer(tournament.id, bot.id);
@@ -213,32 +215,24 @@ export async function createDemoTournament(hostId) {
   const hostAsPlayer = players.find(p => Number(p.player_id) === Number(hostId));
   const botsInTournament = players.filter(p => Number(p.player_id) !== Number(hostId));
 
-  await createMatch(tournament.id, hostAsPlayer.player_id, botsInTournament[0].player_id, 1, 1);
-  await createMatch(tournament.id, botsInTournament[1].player_id, botsInTournament[2].player_id, 1, 2);
+  // Match 1: Host vs Bot Alice
+  const match1 = await createMatch(tournament.id, hostAsPlayer.player_id, botsInTournament[0].player_id, 1, 1);
+  // Match 2: Bot Bob vs Bot Charlie
+  const match2 = await createMatch(tournament.id, botsInTournament[1].player_id, botsInTournament[2].player_id, 1, 2);
 
   await updateTournamentStatus(tournament.id, 'IN_PROGRESS');
 
-  const matches = await getMatchesByTournament(tournament.id);
+  // ONLY complete the bot vs bot match so the bracket looks alive.
+  // Leave match1 alone so the user can actually play it!
+  await updateMatchWinner(match2.id, botsInTournament[1].player_id);
 
-  const round1Match1 = matches.find(m => m.round_number === 1 && m.match_number === 1);
-  const round1Match2 = matches.find(m => m.round_number === 1 && m.match_number === 2);
-
-  if (round1Match1 && round1Match2) {
-    await updateMatchWinner(round1Match1.id, hostId);
-    await updateMatchWinner(round1Match2.id, botsInTournament[1].player_id);
-
-    await createMatch(tournament.id, hostId, botsInTournament[1].player_id, 2, 1);
-
-    const updatedMatches = await getMatchesByTournament(tournament.id);
-    const finalMatch = updatedMatches.find(m => m.round_number === 2);
-    if (finalMatch) {
-      await updateMatchWinner(finalMatch.id, hostId);
-    }
-  }
-
-  await updateTournamentStatus(tournament.id, 'COMPLETED');
-
-  return { tournamentId: tournament.id, status: 'COMPLETED', gameType };
+  // Return the matchId so the frontend can navigate directly into the game!
+  return { 
+    tournamentId: tournament.id, 
+    status: 'IN_PROGRESS', 
+    gameType,
+    firstMatchId: match1.id // Crucial for auto-navigation
+  };
 }
 
 export async function getTournamentBracket(id) {

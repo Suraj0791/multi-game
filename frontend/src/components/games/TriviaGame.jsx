@@ -83,8 +83,9 @@ export default function TriviaGame({ socket, matchId, currentUserId, isSpectator
     const onNewQuestion = (data) => {
       socket.emit('trivia:request_scores', { matchId })
       setQuestion(data.question)
-      setQuestionStartTime(data.questionStartTime || Date.now())
-      setTimeLeft(data.timerSeconds)
+      // FIX: Use LOCAL time, ignore server time to prevent clock skew glitches
+      setQuestionStartTime(Date.now()) 
+      setTimeLeft(data.timerSeconds || 10)
       setSelectedAnswer(null)
       setFeedback(null)
       setHasAnsweredCurrent(false)
@@ -174,17 +175,14 @@ export default function TriviaGame({ socket, matchId, currentUserId, isSpectator
 
     const tick = () => {
       if (!questionStartTime) return
-      const elapsed = Date.now() - questionStartTime
+      // Now both are local, so math is perfect
+      const elapsed = Date.now() - questionStartTime 
       const remaining = Math.max(0, Math.ceil((10000 - elapsed) / 1000))
       setTimeLeft(remaining)
-      if (remaining <= 0) {
-        clearInterval(interval)
-      }
     }
 
     tick()
-    const interval = setInterval(tick, 500)
-
+    const interval = setInterval(tick, 500) // Changed to 500ms so it updates smoother
     return () => clearInterval(interval)
   }, [gameStatus, questionStartTime])
 
@@ -198,7 +196,7 @@ export default function TriviaGame({ socket, matchId, currentUserId, isSpectator
     setGameStatus('answered')
 
     // Calculate how long the user took (for scoring)
-    const timeTakenMs = Date.now() - questionStart
+    const timeTakenMs = Date.now() - questionStartTime
 
     // EMIT to backend
     socket.emit('trivia:answer', {
@@ -207,7 +205,7 @@ export default function TriviaGame({ socket, matchId, currentUserId, isSpectator
       answer,
       timeTakenMs,
     })
-  }, [gameStatus, selectedAnswer, socket, matchId, currentUserId, questionStart])
+  }, [gameStatus, selectedAnswer, socket, matchId, currentUserId, questionStartTime])
 
   // ============================================================
   // RENDER — different UI for each game state

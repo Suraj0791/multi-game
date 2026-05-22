@@ -64,7 +64,8 @@ export default function LandingPage() {
         login(res.token, res.userId)
       }
       const demo = await createDemoTournament()
-      navigate(`/tournaments/${demo.tournamentId}`, { replace: true })
+      // FIX: Take them directly to the active match!
+      navigate(`/tournaments/${demo.tournamentId}/match/${demo.firstMatchId}`, { replace: true })
     } catch {
       setLoading(null)
     }
@@ -88,8 +89,8 @@ export default function LandingPage() {
     setLoading('quick')
     try {
       const data = await createQuickMatch(gameType)
-      // Save the fresh guest token so ProtectedRoute lets us in
       login(data.token, data.userId)
+      // For quick match, take them to the tournament lobby so they can easily copy the URL for tab 2
       navigate(`/tournaments/${data.tournamentId}`, { replace: true })
     } catch {
       setLoading(null)

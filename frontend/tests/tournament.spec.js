@@ -782,11 +782,11 @@ test.describe("TourneyHub End-to-End Suite", () => {
     // Submit wrong guess twice
     await guessInput.fill("WRONG_ANSWER_1");
     await guessBtn.click();
-    await expect(guesserPage.locator("text=Try again!")).toBeVisible({ timeout: 10_000 });
+    await expect(guesserPage.locator("text=Wrong!")).toBeVisible({ timeout: 10_000 });
 
     await guessInput.fill("WRONG_ANSWER_2");
     await guessBtn.click();
-    await expect(guesserPage.locator("text=Try again!")).toBeVisible({ timeout: 10_000 });
+    await expect(guesserPage.locator("text=Wrong!")).toBeVisible({ timeout: 10_000 });
 
     // Submit correct guess
     await guessInput.fill(secretWord);
