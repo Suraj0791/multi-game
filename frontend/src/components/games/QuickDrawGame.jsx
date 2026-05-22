@@ -454,11 +454,10 @@ export default function QuickDrawGame({
               {guesses.map((g, idx) => (
                 <span
                   key={idx}
-                  className={`text-xs px-2.5 py-1 rounded-full border ${
-                    g.correct
-                      ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400 font-bold"
-                      : "bg-red-500/10 border-red-500/20 text-red-400"
-                  }`}
+                  className={`text-xs px-2.5 py-1 rounded-full border ${g.correct
+                    ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400 font-bold"
+                    : "bg-red-500/10 border-red-500/20 text-red-400"
+                    }`}
                 >
                   {g.guess}
                 </span>

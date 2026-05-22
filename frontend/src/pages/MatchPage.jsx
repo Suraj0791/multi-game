@@ -1,12 +1,3 @@
-// ============================================================
-// MATCH PAGE — Smart component for live games
-// ============================================================
-// Fetches match data to know: which game type? who are the players?
-// Connects to WebSocket, passes socket to the game component.
-//
-// This page DECIDES which game to show:
-//   match.gameType === 'TRIVIA'     → <TriviaGame />
-//   match.gameType === 'QUICK_DRAW' → <QuickDrawGame /> (future)
 
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
