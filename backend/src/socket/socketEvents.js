@@ -384,7 +384,10 @@ export default function setupSocketEvents(io) {
     socket.on("submit_guess", async (data) => {
       const { matchId, guess, playerId } = data;
       const game = activeGames[matchId];
-      if (!game) return;
+      if (!game) {
+        socket.emit("error", { message: "Match is not active or has already ended." });
+        return;
+      }
 
       const numericPlayerId = Number(playerId);
       if (numericPlayerId !== game.player1Id && numericPlayerId !== game.player2Id) return;
@@ -393,6 +396,15 @@ export default function setupSocketEvents(io) {
       if (guess.toUpperCase() === game.wordToDraw.toUpperCase()) {
         if (game.timerInterval) clearInterval(game.timerInterval);
         delete activeGames[matchId];
+        
+        // Broadcast correct guess
+        io.to(`match_${matchId}`).emit("quickdraw:guess_attempt", {
+          playerId: numericPlayerId,
+          guess: guess.trim(),
+          correct: true,
+          attemptsLeft: game.maxAttempts - (game.wrongAttempts[numericPlayerId] || 0),
+        });
+
         try {
           const result = await completeMatch(matchId, numericPlayerId);
           io.to(`match_${matchId}`).emit("match_over", {
@@ -410,10 +422,20 @@ export default function setupSocketEvents(io) {
       } else {
         game.wrongAttempts[numericPlayerId] = (game.wrongAttempts[numericPlayerId] || 0) + 1;
         const remaining = game.maxAttempts - game.wrongAttempts[numericPlayerId];
+        
         io.to(`match_${matchId}`).emit("quickdraw:attempt_update", {
           playerId: numericPlayerId,
           attemptsLeft: remaining,
         });
+
+        // Broadcast incorrect guess
+        io.to(`match_${matchId}`).emit("quickdraw:guess_attempt", {
+          playerId: numericPlayerId,
+          guess: guess.trim(),
+          correct: false,
+          attemptsLeft: remaining,
+        });
+
         if (remaining <= 0) {
           if (game.timerInterval) clearInterval(game.timerInterval);
           delete activeGames[matchId];
@@ -543,6 +565,10 @@ export default function setupSocketEvents(io) {
           quickDrawGame.joinedPlayerIds.delete(playerId);
           if (quickDrawGame.joinedPlayerIds.size === 0) {
             if (quickDrawGame.timerInterval) clearInterval(quickDrawGame.timerInterval);
+            if (quickDrawGame.waitingTimeoutId) {
+              clearTimeout(quickDrawGame.waitingTimeoutId);
+              quickDrawGame.waitingTimeoutId = null;
+            }
             delete activeGames[matchId];
           }
           // BUG FIX 2: Removed instantaneous auto-forfeit here too!

@@ -54,6 +54,7 @@ export default function QuickDrawGame({
   const [isDrawing, setIsDrawing] = useState(false);
   const [timeRemaining, setTimeRemaining] = useState(60);
   const [attemptsLeft, setAttemptsLeft] = useState(MAX_ATTEMPTS);
+  const [guesses, setGuesses] = useState([]);
 
   const canvasRef = useRef(null);
 
@@ -70,6 +71,7 @@ export default function QuickDrawGame({
   const onErrorRef = useRef(null);
   const onTimerRef = useRef(null);
   const onAttemptRef = useRef(null);
+  const onGuessAttemptRef = useRef(null);
 
   useEffect(() => {
     if (!socket || !safeUserId) return;
@@ -137,6 +139,18 @@ export default function QuickDrawGame({
       setAttemptsLeft(data.attemptsLeft);
     };
 
+    const onGuessAttempt = (data) => {
+      setGuesses((prev) => [...prev, data]);
+      setAttemptsLeft(data.attemptsLeft);
+      if (Number(data.playerId) === safeUserId) {
+        if (!data.correct) {
+          toast.error(`"${data.guess}" is incorrect!`);
+        } else {
+          toast.success("Correct guess!");
+        }
+      }
+    };
+
     const onError = (data) => {
       toast.error(data.message || "An error occurred");
     };
@@ -158,6 +172,7 @@ export default function QuickDrawGame({
     onErrorRef.current = onError;
     onTimerRef.current = onTimer;
     onAttemptRef.current = onAttemptUpdate;
+    onGuessAttemptRef.current = onGuessAttempt;
     joinMatchRef.current = joinMatch;
 
     socket.on("game_status", onGameStatus);
@@ -168,6 +183,7 @@ export default function QuickDrawGame({
     socket.on("error", onError);
     socket.on("quickdraw:timer", onTimer);
     socket.on("quickdraw:attempt_update", onAttemptUpdate);
+    socket.on("quickdraw:guess_attempt", onGuessAttempt);
 
     if (socket.connected) {
       joinMatch();
@@ -186,6 +202,7 @@ export default function QuickDrawGame({
       socket.off("error", onErrorRef.current);
       socket.off("quickdraw:timer", onTimerRef.current);
       socket.off("quickdraw:attempt_update", onAttemptRef.current);
+      socket.off("quickdraw:guess_attempt", onGuessAttemptRef.current);
     };
   }, [socket, matchId, safeUserId, player1Id, player2Id]);
 
@@ -348,12 +365,10 @@ export default function QuickDrawGame({
                   {Math.floor(timeRemaining / 60)}:{String(timeRemaining % 60).padStart(2, '0')}
                 </span>
               </div>
-              {!isDrawer && !isSpectator && (
-                <div className="flex items-center gap-1.5 bg-neutral-950 px-2.5 py-1 rounded-full border border-neutral-800">
-                  <XCircle className="h-3.5 w-3.5 text-red-400" />
-                  <span className="text-neutral-300">{attemptsLeft}/{MAX_ATTEMPTS} guesses</span>
-                </div>
-              )}
+              <div className="flex items-center gap-1.5 bg-neutral-950 px-2.5 py-1 rounded-full border border-neutral-800">
+                <span className={`h-2 w-2 rounded-full ${attemptsLeft <= 2 ? 'bg-red-500 animate-pulse' : 'bg-emerald-500'}`} />
+                <span className="text-neutral-300">Chances left: {attemptsLeft}/{MAX_ATTEMPTS}</span>
+              </div>
             </div>
           )}
         </CardContent>
@@ -434,6 +449,29 @@ export default function QuickDrawGame({
         <p className="text-center text-sm text-red-400 font-bold bg-red-500/10 border border-red-500/20 rounded p-2">
           {guessMessage}
         </p>
+      )}
+
+      {/* Live Guesses feed */}
+      {guesses.length > 0 && (
+        <Card className="border-neutral-800 bg-neutral-900/40">
+          <CardContent className="p-3.5 space-y-2">
+            <h3 className="text-xs font-bold text-neutral-400 uppercase tracking-wider">Live Guesses</h3>
+            <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto">
+              {guesses.map((g, idx) => (
+                <span
+                  key={idx}
+                  className={`text-xs px-2.5 py-1 rounded-full border ${
+                    g.correct
+                      ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400 font-bold"
+                      : "bg-red-500/10 border-red-500/20 text-red-400"
+                  }`}
+                >
+                  {g.guess}
+                </span>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
       )}
     </div>
   );
