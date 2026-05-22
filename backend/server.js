@@ -11,11 +11,15 @@ import setupSocketEvents from "./src/socket/socketEvents.js";
 // 1. Wrap our Express app in a standard HTTP server
 const httpServer = createServer(app);
 
-// 2. Attach the Socket.io "Switchboard" to that server
+// 2. Attach the Socket.io "Switchboard" to that server with unified CORS settings
+const corsOptions = {
+  origin: process.env.FRONTEND_URL || process.env.CORS_ORIGIN || 'http://localhost:5173',
+  methods: ['GET', 'POST', 'PUT', 'DELETE'],
+  credentials: true
+};
+
 export const io = new Server(httpServer, {
-  cors: {
-    origin: "*",
-  }
+  cors: corsOptions
 });
 
 // 3. Expose IO to debug endpoint for test instrumentation

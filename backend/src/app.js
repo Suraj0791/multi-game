@@ -25,11 +25,13 @@ const app = express();
 app.use(helmet());
 
 // CORS — controls which domains can call your API
-// In development: allow all. In production: lock to your frontend domain.
-app.use(cors({
-  origin: process.env.CORS_ORIGIN || '*',
-  // In production .env: CORS_ORIGIN=https://tourneyhub.com
-}));
+// In development: allow localhost. In production: lock to your frontend domain.
+const corsOptions = {
+  origin: process.env.FRONTEND_URL || process.env.CORS_ORIGIN || 'http://localhost:5173',
+  methods: ['GET', 'POST', 'PUT', 'DELETE'],
+  credentials: true
+};
+app.use(cors(corsOptions));
 
 // Rate Limiting — prevents spam and brute force attacks
 // 100 requests per 15 minutes per IP address (skipped in development/testing)
