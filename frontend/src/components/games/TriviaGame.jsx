@@ -253,7 +253,7 @@ export default function TriviaGame({ socket, matchId, currentUserId, isSpectator
 
             {gameStatus === 'result' && feedback && (
               <div className={`text-center text-sm font-bold rounded-lg p-3 animate-in fade-in zoom-in duration-200 ${feedback.correct ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-red-500/10 text-red-400 border border-red-500/20'}`}>
-                {feedback.correct ? `Correct! +${feedback.points} pts` : `Round Over! Correct Answer: ${feedback.correctAnswer}`}
+                {feedback.correct ? `Correct! +${feedback.points} pts` : `Correct Answer: ${feedback.correctAnswer}`}
               </div>
             )}
           </div>

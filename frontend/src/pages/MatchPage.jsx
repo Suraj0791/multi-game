@@ -10,12 +10,14 @@
 
 import { useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
+import { useRef } from "react";
 import useSocket from "@/hooks/useSocket";
 import useAuthStore from "@/stores/authStore";
 import api from "@/api/axiosClient";
 import TriviaGame from "@/components/games/TriviaGame";
 import QuickDrawGame from "@/components/games/QuickDrawGame";
 import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { Trophy } from "lucide-react";
 
 // Fetch match details — we need to know the game type and player IDs
@@ -43,6 +45,12 @@ export default function MatchPage() {
     enabled: !!matchId,
   });
 
+  // Track the initial status of the match when first loaded
+  const initialStatusRef = useRef(null);
+  if (match && initialStatusRef.current === null) {
+    initialStatusRef.current = match.status;
+  }
+
   // Guard: wait until we have both match data and a valid userId
   const hasValidUserId = userId && Number(userId) > 0;
 
@@ -62,8 +70,8 @@ export default function MatchPage() {
     );
   }
 
-  // If match is already completed, show result instead of trying to play
-  if (match.status === 'COMPLETED') {
+  // If match was already completed when loading the page, show result instead of trying to play
+  if (initialStatusRef.current === 'COMPLETED') {
     const isWinner = Number(userId) === Number(match.winnerId);
     return (
       <Card className="max-w-lg mx-auto border-neutral-800 bg-neutral-950/40 mt-8">
@@ -76,6 +84,12 @@ export default function MatchPage() {
             <p>{match.player1Name} vs {match.player2Name}</p>
             <p className="text-xs text-muted-foreground">This match has already been completed.</p>
           </div>
+          <Button 
+            className="w-full bg-amber-500 hover:bg-amber-600 text-neutral-950 font-bold mt-4"
+            onClick={() => window.location.href = '/tournaments'}
+          >
+            Return to Dashboard
+          </Button>
         </CardContent>
       </Card>
     );
