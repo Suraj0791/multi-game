@@ -36,8 +36,9 @@ export default function TriviaGame({ socket, matchId, currentUserId, isSpectator
   const [feedback, setFeedback] = useState(null)
   const [scores, setScores] = useState({})
   const [finalResult, setFinalResult] = useState(null)
-  const [questionStart, setQuestionStart] = useState(0)
+  const [questionStartTime, setQuestionStartTime] = useState(0)
   const [countdown, setCountdown] = useState(3)
+  const [hasAnsweredCurrent, setHasAnsweredCurrent] = useState(false)
 
   const userIdNum = Number(currentUserId);
   const safeUserId = !isNaN(userIdNum) && userIdNum > 0 ? userIdNum : null;
@@ -51,6 +52,7 @@ export default function TriviaGame({ socket, matchId, currentUserId, isSpectator
   const onRoundOverRef = useRef(null);
   const onMatchOverRef = useRef(null);
   const onTriviaErrorRef = useRef(null);
+  const onHasAnsweredRef = useRef(null);
 
   // Countdown timer for starting state
   useEffect(() => {
@@ -81,11 +83,12 @@ export default function TriviaGame({ socket, matchId, currentUserId, isSpectator
     const onNewQuestion = (data) => {
       socket.emit('trivia:request_scores', { matchId })
       setQuestion(data.question)
+      setQuestionStartTime(data.questionStartTime || Date.now())
       setTimeLeft(data.timerSeconds)
       setSelectedAnswer(null)
       setFeedback(null)
+      setHasAnsweredCurrent(false)
       setGameStatus('playing')
-      setQuestionStart(Date.now())
     }
 
     const onFeedback = (data) => {
@@ -115,6 +118,10 @@ export default function TriviaGame({ socket, matchId, currentUserId, isSpectator
       toast.error(data.message || 'An error occurred');
     }
 
+    const onHasAnswered = (data) => {
+      setHasAnsweredCurrent(data.hasAnswered);
+    }
+
     const joinMatch = () => {
       socket.emit('trivia:join', { matchId, playerId: safeUserId })
     }
@@ -127,6 +134,7 @@ export default function TriviaGame({ socket, matchId, currentUserId, isSpectator
     onRoundOverRef.current = onRoundOver;
     onMatchOverRef.current = onMatchOver;
     onTriviaErrorRef.current = onTriviaError;
+    onHasAnsweredRef.current = onHasAnswered;
     joinMatchRef.current = joinMatch;
 
     socket.on('trivia:started', onStarted)
@@ -136,6 +144,7 @@ export default function TriviaGame({ socket, matchId, currentUserId, isSpectator
     socket.on('trivia:round_over', onRoundOver)
     socket.on('trivia:match_over', onMatchOver)
     socket.on('trivia:error', onTriviaError)
+    socket.on('trivia:has_answered', onHasAnswered)
 
     if (socket.connected) {
       joinMatch()
@@ -153,28 +162,31 @@ export default function TriviaGame({ socket, matchId, currentUserId, isSpectator
       socket.off('trivia:round_over', onRoundOverRef.current)
       socket.off('trivia:match_over', onMatchOverRef.current)
       socket.off('trivia:error', onTriviaErrorRef.current)
+      socket.off('trivia:has_answered', onHasAnsweredRef.current)
     }
   }, [socket, matchId, safeUserId])
 
   // ============================================================
-  // TIMER — counts down every second
+  // TIMER — server-authoritative, uses questionStartTime
   // ============================================================
   useEffect(() => {
-    if (gameStatus !== 'playing' || timeLeft <= 0) return
+    if (gameStatus !== 'playing') return
 
-    const timer = setInterval(() => {
-      setTimeLeft(prev => {
-        if (prev <= 1) {
-          clearInterval(timer)
-          return 0
-        }
-        return prev - 1
-      })
-    }, 1000)
+    const tick = () => {
+      if (!questionStartTime) return
+      const elapsed = Date.now() - questionStartTime
+      const remaining = Math.max(0, Math.ceil((10000 - elapsed) / 1000))
+      setTimeLeft(remaining)
+      if (remaining <= 0) {
+        clearInterval(interval)
+      }
+    }
 
-    // Cleanup the timer when question changes or component unmounts
-    return () => clearInterval(timer)
-  }, [gameStatus, timeLeft])
+    tick()
+    const interval = setInterval(tick, 500)
+
+    return () => clearInterval(interval)
+  }, [gameStatus, questionStartTime])
 
   // ============================================================
   // HANDLER: User clicks an answer
@@ -186,7 +198,7 @@ export default function TriviaGame({ socket, matchId, currentUserId, isSpectator
     setGameStatus('answered')
 
     // Calculate how long the user took (for scoring)
-    const timeTakenMs = Date.now() - questionStart
+    const timeTakenMs = Date.now() - questionStartTime
 
     // EMIT to backend
     socket.emit('trivia:answer', {
@@ -195,7 +207,7 @@ export default function TriviaGame({ socket, matchId, currentUserId, isSpectator
       answer,
       timeTakenMs,
     })
-  }, [gameStatus, selectedAnswer, socket, matchId, currentUserId, questionStart])
+  }, [gameStatus, selectedAnswer, socket, matchId, currentUserId, questionStartTime])
 
   // ============================================================
   // RENDER — different UI for each game state

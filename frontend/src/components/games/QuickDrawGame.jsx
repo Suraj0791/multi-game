@@ -53,6 +53,8 @@ export default function QuickDrawGame({
   const [finalResult, setFinalResult] = useState(null);
   const [isDrawing, setIsDrawing] = useState(false);
   const [timeRemaining, setTimeRemaining] = useState(60);
+  const [timeLimit, setTimeLimit] = useState(60);
+  const [startTime, setStartTime] = useState(0);
   const [attemptsLeft, setAttemptsLeft] = useState(MAX_ATTEMPTS);
 
   const canvasRef = useRef(null);
@@ -78,6 +80,12 @@ export default function QuickDrawGame({
       setGameStatus("playing");
       if (data.wordToDraw) {
         setWordToDraw(data.wordToDraw);
+      }
+      if (data.startTime) {
+        setStartTime(data.startTime);
+      }
+      if (data.timeLimit) {
+        setTimeLimit(data.timeLimit);
       }
     };
 
@@ -131,6 +139,8 @@ export default function QuickDrawGame({
 
     const onTimer = (data) => {
       setTimeRemaining(data.timeRemaining);
+      if (data.startTime) setStartTime(data.startTime);
+      if (data.timeLimit) setTimeLimit(data.timeLimit);
     };
 
     const onAttemptUpdate = (data) => {
@@ -188,6 +198,27 @@ export default function QuickDrawGame({
       socket.off("quickdraw:attempt_update", onAttemptRef.current);
     };
   }, [socket, matchId, safeUserId, player1Id, player2Id]);
+
+  // ============================================================
+  // LOCAL TIMER — calculates remaining time from server startTime
+  // ============================================================
+  useEffect(() => {
+    if (gameStatus !== 'playing' || !startTime) return
+
+    const tick = () => {
+      const elapsed = Math.floor((Date.now() - startTime) / 1000)
+      const remaining = Math.max(0, timeLimit - elapsed)
+      setTimeRemaining(remaining)
+      if (remaining <= 0) {
+        clearInterval(interval)
+      }
+    }
+
+    tick()
+    const interval = setInterval(tick, 500)
+
+    return () => clearInterval(interval)
+  }, [gameStatus, startTime, timeLimit])
 
   // ============================================================
   // CANVAS DRAWING HANDLERS (only for the drawer)
@@ -330,7 +361,7 @@ export default function QuickDrawGame({
                 <Eye className="h-4 w-4 text-amber-400" />
               )}
               <span className="text-sm font-semibold text-neutral-200">
-                {isSpectator ? "SPECTATING" : (isDrawer ? "DRAWING" : "GUESSING")}
+                {isSpectator ? "You are SPECTATING" : (isDrawer ? "You are DRAWING" : "You are GUESSING")}
               </span>
             </div>
             {isDrawer && wordToDraw && (

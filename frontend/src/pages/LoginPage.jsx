@@ -24,17 +24,19 @@
 
 import { useState } from 'react'
 import { useForm } from 'react-hook-form'
-import { Link, useNavigate } from 'react-router-dom'
-import { Trophy } from 'lucide-react'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { Trophy, User } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
-import { loginUser } from '@/api/authApi'
+import { loginUser, guestLogin } from '@/api/authApi'
 import useAuthStore from '@/stores/authStore'
 
 export default function LoginPage() {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const login = useAuthStore((state) => state.login)
+  const redirectTo = decodeURIComponent(searchParams.get('redirect') || '/tournaments')
 
   const {
     register,
@@ -43,6 +45,17 @@ export default function LoginPage() {
   } = useForm()
 
   const [error, setError] = useState(null)
+
+  const handleGuestLogin = async () => {
+    setError(null)
+    try {
+      const res = await guestLogin()
+      login(res.token, res.userId)
+      navigate(redirectTo, { replace: true })
+    } catch {
+      setError('Guest login failed. Try again.')
+    }
+  }
 
   const onSubmit = async (data) => {
     setError(null)
@@ -53,8 +66,8 @@ export default function LoginPage() {
       // STEP B: Save token to Zustand + localStorage
       login(response.token, response.userId)
 
-      // STEP C: Redirect to the app
-      navigate('/tournaments', { replace: true })
+      // STEP C: Redirect back to where the user was going
+      navigate(redirectTo, { replace: true })
     } catch (err) {
       // Show the backend error message (or a generic one)
       setError(err.response?.data?.error || 'Login failed. Try again.')
@@ -112,6 +125,20 @@ export default function LoginPage() {
               {isSubmitting ? 'Signing in...' : 'Sign in'}
             </Button>
           </form>
+
+          <div className="relative my-4">
+            <div className="absolute inset-0 flex items-center">
+              <span className="w-full border-t border-neutral-800" />
+            </div>
+            <div className="relative flex justify-center text-xs">
+              <span className="bg-neutral-950 px-2 text-muted-foreground">or</span>
+            </div>
+          </div>
+
+          <Button variant="outline" className="w-full gap-2" onClick={handleGuestLogin}>
+            <User className="h-4 w-4" />
+            Continue as Guest (No Sign-up)
+          </Button>
 
           <p className="text-center text-sm text-muted-foreground mt-4">
             Don't have an account?{' '}

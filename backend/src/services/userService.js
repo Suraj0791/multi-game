@@ -63,7 +63,7 @@ export async function loginUser(email, password) {
 export async function guestLogin() {
   const randomSuffix = Math.random().toString(36).substring(2, 6);
   const username = `Player_${randomSuffix}`;
-  const email = `guest_${randomSuffix}_${Date.now()}@tourneyhub.demo`;
+  const email = `guest_${randomSuffix}_${Date.now()}@tourneyhub.guest`;
   const randomPassword = Math.random().toString(36).substring(2, 10);
   const hashedPassword = await bcrypt.hash(randomPassword, 10);
 

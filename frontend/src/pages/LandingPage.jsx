@@ -4,7 +4,7 @@ import { Trophy, Swords, Brain, Users, ArrowRight, Sparkles, LayoutDashboard } f
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { guestLogin } from '@/api/authApi'
-import { createDemoTournament, createVsBotMatch } from '@/api/tournamentApi'
+import { createDemoTournament, createVsBotMatch, createQuickMatch } from '@/api/tournamentApi'
 import useAuthStore from '@/stores/authStore'
 
 const FEATURES = [
@@ -50,7 +50,7 @@ export default function LandingPage() {
     try {
       const res = await guestLogin()
       login(res.token, res.userId)
-      navigate('/tournaments')
+      navigate('/tournaments', { replace: true })
     } catch {
       setLoading(null)
     }
@@ -64,7 +64,7 @@ export default function LandingPage() {
         login(res.token, res.userId)
       }
       const demo = await createDemoTournament()
-      navigate(`/tournaments/${demo.tournamentId}`)
+      navigate(`/tournaments/${demo.tournamentId}`, { replace: true })
     } catch {
       setLoading(null)
     }
@@ -78,7 +78,19 @@ export default function LandingPage() {
         login(res.token, res.userId)
       }
       const match = await createVsBotMatch(gameType)
-      navigate(`/tournaments/${match.tournamentId}/match/${match.matchId}`)
+      navigate(`/tournaments/${match.tournamentId}/match/${match.matchId}`, { replace: true })
+    } catch {
+      setLoading(null)
+    }
+  }
+
+  const handleQuickMatch = async (gameType) => {
+    setLoading('quick')
+    try {
+      const data = await createQuickMatch(gameType)
+      // Save the fresh guest token so ProtectedRoute lets us in
+      login(data.token, data.userId)
+      navigate(`/tournaments/${data.tournamentId}`, { replace: true })
     } catch {
       setLoading(null)
     }
@@ -178,7 +190,7 @@ export default function LandingPage() {
           </div>
 
           {/* Play vs Bot buttons */}
-          <div className="flex items-center justify-center gap-3 flex-wrap mt-4">
+          <div className="flex items-center justify-center gap-3 flex-wrap mt-5">
             <span className="text-sm text-muted-foreground mr-1">Play vs Bot:</span>
             <Button
               variant="outline"
@@ -200,11 +212,33 @@ export default function LandingPage() {
             </Button>
           </div>
 
-          <p className="text-xs text-muted-foreground mt-4">
-            {token
-              ? 'Click "See Demo" to view a completed tournament bracket instantly, or browse existing tournaments.'
-              : 'No sign-up required. Demo creates a completed 4-player bracket so you can see how it works.'
-            }
+          {/* Quick Match — two real players */}
+          <div className="flex items-center justify-center gap-3 flex-wrap mt-3">
+            <span className="text-sm text-muted-foreground mr-1">Quick Match (2 players):</span>
+            <Button
+              variant="secondary"
+              size="sm"
+              className="gap-1.5"
+              onClick={() => handleQuickMatch('TRIVIA')}
+              disabled={loading !== null}
+            >
+              {loading === 'quick' ? '...' : <><Brain className="h-3.5 w-3.5" /> Trivia</>}
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              className="gap-1.5"
+              onClick={() => handleQuickMatch('QUICK_DRAW')}
+              disabled={loading !== null}
+            >
+              {loading === 'quick' ? '...' : <><Swords className="h-3.5 w-3.5" /> Quick Draw</>}
+            </Button>
+          </div>
+
+          <p className="text-xs text-muted-foreground mt-4 max-w-lg mx-auto">
+            <strong>Real-time proof:</strong> Open this page in two browser windows (use Incognito for the 2nd).
+            Click <strong>Quick Match</strong> in one, copy the invite link, open it in the other window.
+            Both join the match — watch answers/strokes sync live via WebSocket.
           </p>
 
           <div className="mt-12 max-w-md mx-auto">

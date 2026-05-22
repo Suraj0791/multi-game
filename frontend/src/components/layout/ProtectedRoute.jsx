@@ -1,15 +1,15 @@
-import { Navigate } from 'react-router-dom'
+import { Navigate, useLocation } from 'react-router-dom'
 import useAuthStore from '@/stores/authStore'
 
 export default function ProtectedRoute({ children }) {
-  // Grab the token from our auth store
   const token = useAuthStore((state) => state.token)
+  const location = useLocation()
 
-  // No token = not logged in = go to login
   if (!token) {
-    return <Navigate to="/login" replace />
+    // Preserve the intended URL so login can redirect back
+    const redirect = encodeURIComponent(location.pathname + location.search)
+    return <Navigate to={`/login?redirect=${redirect}`} replace />
   }
 
-  // Has token = logged in = show the page
   return children
 }
