@@ -23,3 +23,23 @@ playwright/.cache/
 
 # Custom Test Output
 test-artifacts/
+
+# Build outputs
+dist/
+build/
+out/
+.vercel/
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# OS / Editor
+.DS_Store
+.vscode/
+.idea/
+coverage/
