@@ -5,12 +5,10 @@ import { TriviaGame } from "../games/TriviaGame.js";
 import { sendMessage } from "../services/chatService.js";
 import { findById } from "../models/User.js";
 import { setSocketIO } from "../services/notificationService.js";
-// Bot imports removed
 
 const activeGames = {};
 const activeTriviaGames = {};
 const announcedChatUsers = {};
-
 const chatUsernames = {};
 const lastChatTime = {};
 const socketJoinedRooms = {};
@@ -27,15 +25,15 @@ function checkTriviaBothAnswered(io, matchId, player1Id, player2Id, roomName) {
       game.timeoutId = null;
     }
 
-
     const correctAns = game.questions[game.currentQuestionIndex].correctAnswer;
     io.to(roomName).emit("trivia:round_over", { correctAnswer: correctAns });
 
     game.nextRound();
 
+    // 🟢 FIX: Increased delay from 1s to 4s so players can read the results!
     game.timeoutId = setTimeout(() => {
       sendNextTriviaQuestion(io, matchId, player1Id, player2Id);
-    }, 1000);
+    }, 4000); 
   }
 }
 
@@ -55,7 +53,6 @@ async function sendNextTriviaQuestion(io, matchId, player1Id, player2Id) {
     const winnerId = game.getWinner(player1Id, player2Id);
     try {
       const result = await completeMatch(matchId, winnerId);
-
       io.to(roomName).emit("trivia:match_over", {
         winnerId,
         scores: game.scores,
@@ -81,21 +78,21 @@ async function sendNextTriviaQuestion(io, matchId, player1Id, player2Id) {
 
     game.nextRound();
 
+    // 🟢 FIX: Increased delay from 3s to 4s so players can read the results!
     game.timeoutId = setTimeout(() => {
       sendNextTriviaQuestion(io, matchId, player1Id, player2Id);
-    }, 3000);
+    }, 4000);
   }, 10000);
 }
-
-
 
 export default function setupSocketEvents(io) {
   setSocketIO(io);
 
   io.on("connection", (socket) => {
-    console.log(`📞 User connected: ${socket.id}`);
-
+    
+    // ==========================================
     // TRIVIA GAME EVENTS
+    // ==========================================
     socket.on("trivia:join", async (data) => {
       const { matchId, playerId } = data;
       const numericPlayerId = Number(playerId);
@@ -118,11 +115,7 @@ export default function setupSocketEvents(io) {
 
         if (isPlayer) {
           if (!activeTriviaGames[matchId]) {
-            activeTriviaGames[matchId] = new TriviaGame(
-              matchId,
-              match.player_1_id,
-              match.player_2_id
-            );
+            activeTriviaGames[matchId] = new TriviaGame(matchId, match.player_1_id, match.player_2_id);
             activeTriviaGames[matchId].joinedPlayerIds = new Set();
             activeTriviaGames[matchId].connectedSockets = {};
             activeTriviaGames[matchId].hasStarted = false;
@@ -139,8 +132,6 @@ export default function setupSocketEvents(io) {
           }
           game.connectedSockets[numericPlayerId].add(socket.id);
           game.joinedPlayerIds.add(numericPlayerId);
-
-
 
           socket.matchId = matchId;
           socket.playerId = numericPlayerId;
@@ -162,41 +153,44 @@ export default function setupSocketEvents(io) {
                 sendNextTriviaQuestion(io, matchId, match.player_1_id, match.player_2_id);
               }, 3000);
             } else {
-              // 🔴 KILL ANY GHOST TIMERS BEFORE STARTING A NEW ONE
-              if (game.waitingTimeoutId) {
-                clearTimeout(game.waitingTimeoutId);
-              }
-
+              // Kill ghost timers
+              if (game.waitingTimeoutId) clearTimeout(game.waitingTimeoutId);
               game.waitingTimeoutId = setTimeout(() => {
                 const rName = `match_${matchId}`;
                 io.to(rName).emit("error", {
                   message: "Match cancelled: Opponent didn't join in time"
                 });
                 delete activeTriviaGames[matchId];
-              }, 60000); // 🟢 Increased to 60 seconds!
+              }, 60000);
 
               socket.emit("trivia:waiting", { message: "Waiting for opponent..." });
             }
           } else {
-            socket.emit("trivia:started", { message: "Reconnected to active match!" });
+            // 🟢 FIX: The "Strict Mode Desync" Fix
             socket.emit("trivia:score_update", { scores: game.scores });
 
-            if (!game.isGameOver() && game.questions[game.currentQuestionIndex]) {
+            if (game.questionStartTime && !game.roundEnded) {
+              // Question is live, send it instantly
+              socket.emit("trivia:started", { message: "Reconnected to active match!" });
               const question = game.getCurrentQuestion();
-              const timeElapsed = game.questionStartTime ? Date.now() - game.questionStartTime : 0;
+              const timeElapsed = Date.now() - game.questionStartTime;
               const timeLeft = Math.max(0, Math.ceil((10000 - timeElapsed) / 1000));
               socket.emit("trivia:new_question", { question, timerSeconds: timeLeft });
+            } else {
+              // They connected during the 3..2..1 countdown or result screen. Wait for the server!
+              socket.emit("trivia:started", { message: "Game in progress..." });
             }
           }
         } else {
+          // Spectator logic
           const game = activeTriviaGames[matchId];
           if (game) {
             socket.emit("trivia:score_update", { scores: game.scores });
             if (game.hasStarted) {
               socket.emit("trivia:started", { message: "Spectating active match!" });
-              if (!game.isGameOver() && game.questions[game.currentQuestionIndex]) {
+              if (game.questionStartTime && !game.roundEnded && !game.isGameOver()) {
                 const question = game.getCurrentQuestion();
-                const timeElapsed = game.questionStartTime ? Date.now() - game.questionStartTime : 0;
+                const timeElapsed = Date.now() - game.questionStartTime;
                 const timeLeft = Math.max(0, Math.ceil((10000 - timeElapsed) / 1000));
                 socket.emit("trivia:new_question", { question, timerSeconds: timeLeft });
               }
@@ -205,7 +199,6 @@ export default function setupSocketEvents(io) {
         }
       } catch (err) {
         console.error("Error in trivia:join:", err);
-        socket.emit("error", { message: "Server error" });
       }
     });
 
@@ -215,10 +208,7 @@ export default function setupSocketEvents(io) {
       if (!game) return;
 
       const numericPlayerId = Number(playerId);
-      if (numericPlayerId !== game.player1Id && numericPlayerId !== game.player2Id) {
-        return;
-      }
-
+      if (numericPlayerId !== game.player1Id && numericPlayerId !== game.player2Id) return;
       if (game.hasAnsweredCurrent[numericPlayerId]) return;
       if (game.roundEnded) return;
 
@@ -240,17 +230,16 @@ export default function setupSocketEvents(io) {
 
         game.nextRound();
 
+        // 🟢 FIX: Increased delay from 1s to 4s
         game.timeoutId = setTimeout(() => {
           sendNextTriviaQuestion(io, matchId, game.player1Id, game.player2Id);
-        }, 1000);
+        }, 4000);
       }
     });
 
     socket.on("trivia:request_scores", (data) => {
       const game = activeTriviaGames[data.matchId];
-      if (game) {
-        socket.emit("trivia:score_update", { scores: game.scores });
-      }
+      if (game) socket.emit("trivia:score_update", { scores: game.scores });
     });
 
     // ==========================================
@@ -259,17 +248,11 @@ export default function setupSocketEvents(io) {
     socket.on("join_match", async (data) => {
       const { matchId, playerId } = data;
       const numericPlayerId = Number(playerId);
-      if (isNaN(numericPlayerId) || !matchId) {
-        socket.emit("error", { message: "Invalid payload" });
-        return;
-      }
+      if (isNaN(numericPlayerId) || !matchId) return;
 
       try {
         const match = await getMatchById(matchId);
-        if (!match) {
-          socket.emit("error", { message: "Match not found" });
-          return;
-        }
+        if (!match) return;
 
         const roomName = `match_${matchId}`;
         socket.join(roomName);
@@ -306,8 +289,6 @@ export default function setupSocketEvents(io) {
           }
           game.connectedSockets[numericPlayerId].add(socket.id);
           game.joinedPlayerIds.add(numericPlayerId);
-
-
 
           socket.matchId = matchId;
           socket.playerId = numericPlayerId;
@@ -354,21 +335,15 @@ export default function setupSocketEvents(io) {
                   break;
                 }
               }
-
-
             } else {
-              // 🔴 KILL ANY GHOST TIMERS BEFORE STARTING A NEW ONE
-              if (game.waitingTimeoutId) {
-                clearTimeout(game.waitingTimeoutId);
-              }
-
+              if (game.waitingTimeoutId) clearTimeout(game.waitingTimeoutId);
               game.waitingTimeoutId = setTimeout(() => {
                 const rName = `match_${matchId}`;
                 io.to(rName).emit("error", {
                   message: "Match cancelled: Opponent didn't join in time"
                 });
                 delete activeGames[matchId];
-              }, 60000); // 🟢 Increased to 60 seconds!
+              }, 60000);
 
               socket.emit("game_status_waiting", { message: "Waiting for opponent..." });
             }
@@ -387,17 +362,12 @@ export default function setupSocketEvents(io) {
         } else {
           const game = activeGames[matchId];
           if (game) {
-            if (game.hasStarted) {
-              socket.emit("game_status", { message: "Spectating match!" });
-            }
-            if (game.strokes && game.strokes.length > 0) {
-              socket.emit("draw_history", { strokes: game.strokes });
-            }
+            if (game.hasStarted) socket.emit("game_status", { message: "Spectating match!" });
+            if (game.strokes && game.strokes.length > 0) socket.emit("draw_history", { strokes: game.strokes });
           }
         }
       } catch (err) {
         console.error("Error in join_match:", err);
-        socket.emit("error", { message: "Server error" });
       }
     });
 
@@ -405,7 +375,6 @@ export default function setupSocketEvents(io) {
       const { matchId, playerId, x, y, type } = data;
       const game = activeGames[matchId];
       if (!game) return;
-
       if (Number(playerId) !== Number(game.drawerId)) return;
       game.strokes.push({ x, y, type });
       socket.to(`match_${matchId}`).emit("receive_stroke", data);
@@ -414,10 +383,7 @@ export default function setupSocketEvents(io) {
     socket.on("submit_guess", async (data) => {
       const { matchId, guess, playerId } = data;
       const game = activeGames[matchId];
-      if (!game) {
-        socket.emit("error", { message: "Match is not active or has already ended." });
-        return;
-      }
+      if (!game) return;
 
       const numericPlayerId = Number(playerId);
       if (numericPlayerId !== game.player1Id && numericPlayerId !== game.player2Id) return;
@@ -427,43 +393,28 @@ export default function setupSocketEvents(io) {
         if (game.timerInterval) clearInterval(game.timerInterval);
         delete activeGames[matchId];
         
-        // Broadcast correct guess
         io.to(`match_${matchId}`).emit("quickdraw:guess_attempt", {
-          playerId: numericPlayerId,
-          guess: guess.trim(),
-          correct: true,
+          playerId: numericPlayerId, guess: guess.trim(), correct: true,
           attemptsLeft: game.maxAttempts - (game.wrongAttempts[numericPlayerId] || 0),
         });
 
         try {
           const result = await completeMatch(matchId, numericPlayerId);
           io.to(`match_${matchId}`).emit("match_over", {
-            winnerId: numericPlayerId,
-            word: game.wordToDraw,
-            bracketUpdate: result.message,
+            winnerId: numericPlayerId, word: game.wordToDraw, bracketUpdate: result.message,
           });
         } catch (error) {
           io.to(`match_${matchId}`).emit("match_over", {
-            winnerId: numericPlayerId,
-            word: game.wordToDraw,
-            bracketUpdate: "Result saved locally",
+            winnerId: numericPlayerId, word: game.wordToDraw, bracketUpdate: "Result saved locally",
           });
         }
       } else {
         game.wrongAttempts[numericPlayerId] = (game.wrongAttempts[numericPlayerId] || 0) + 1;
         const remaining = game.maxAttempts - game.wrongAttempts[numericPlayerId];
         
-        io.to(`match_${matchId}`).emit("quickdraw:attempt_update", {
-          playerId: numericPlayerId,
-          attemptsLeft: remaining,
-        });
-
-        // Broadcast incorrect guess
+        io.to(`match_${matchId}`).emit("quickdraw:attempt_update", { playerId: numericPlayerId, attemptsLeft: remaining });
         io.to(`match_${matchId}`).emit("quickdraw:guess_attempt", {
-          playerId: numericPlayerId,
-          guess: guess.trim(),
-          correct: false,
-          attemptsLeft: remaining,
+          playerId: numericPlayerId, guess: guess.trim(), correct: false, attemptsLeft: remaining,
         });
 
         if (remaining <= 0) {
@@ -472,25 +423,12 @@ export default function setupSocketEvents(io) {
           const winnerId = game.player1Id === numericPlayerId ? game.player2Id : game.player1Id;
           try {
             const result = await completeMatch(matchId, winnerId);
-            io.to(`match_${matchId}`).emit("match_over", {
-              winnerId,
-              word: game.wordToDraw,
-              bracketUpdate: result.message,
-              message: "Too many wrong guesses!",
-            });
+            io.to(`match_${matchId}`).emit("match_over", { winnerId, word: game.wordToDraw, bracketUpdate: result.message, message: "Too many wrong guesses!" });
           } catch {
-            io.to(`match_${matchId}`).emit("match_over", {
-              winnerId,
-              word: game.wordToDraw,
-              bracketUpdate: "Result saved locally",
-              message: "Too many wrong guesses!",
-            });
+            io.to(`match_${matchId}`).emit("match_over", { winnerId, word: game.wordToDraw, bracketUpdate: "Result saved locally", message: "Too many wrong guesses!" });
           }
         } else {
-          socket.emit("wrong_guess", {
-            message: `Wrong! ${remaining} guess${remaining > 1 ? 'es' : ''} left`,
-            attemptsLeft: remaining,
-          });
+          socket.emit("wrong_guess", { message: `Wrong! ${remaining} guess${remaining > 1 ? 'es' : ''} left`, attemptsLeft: remaining });
         }
       }
     });
@@ -518,10 +456,7 @@ export default function setupSocketEvents(io) {
         announcedChatUsers[roomName].add(numericUserId);
 
         if (!alreadyAnnounced) {
-          io.to(roomName).emit("chat:user_joined", {
-            username: username,
-            message: `${username} joined the chat`,
-          });
+          io.to(roomName).emit("chat:user_joined", { username: username, message: `${username} joined the chat` });
         }
       } catch (error) {
         console.error("Chat join error:", error);
@@ -530,16 +465,13 @@ export default function setupSocketEvents(io) {
 
     socket.on("chat:leave", (data) => {
       const { tournamentId } = data;
-      const roomName = `chat_tournament_${tournamentId}`;
-      socket.leave(roomName);
-      if (socketJoinedRooms[socket.id]) delete socketJoinedRooms[socket.id][roomName];
+      socket.leave(`chat_tournament_${tournamentId}`);
+      if (socketJoinedRooms[socket.id]) delete socketJoinedRooms[socket.id][`chat_tournament_${tournamentId}`];
     });
 
     socket.on("chat:send", async (data) => {
       const { tournamentId, userId, text } = data;
-      const roomName = `chat_tournament_${tournamentId}`;
       const numericUserId = Number(userId);
-
       if (!userId || isNaN(numericUserId) || numericUserId <= 0) return;
 
       const now = Date.now();
@@ -551,12 +483,8 @@ export default function setupSocketEvents(io) {
 
       try {
         const saved = await sendMessage(tournamentId, numericUserId, text);
-        io.to(roomName).emit("chat:message", {
-          id: saved.id,
-          userId: saved.user_id,
-          username: chatUsernames[socket.id] || "Anonymous",
-          message: saved.message,
-          createdAt: saved.created_at,
+        io.to(`chat_tournament_${tournamentId}`).emit("chat:message", {
+          id: saved.id, userId: saved.user_id, username: chatUsernames[socket.id] || "Anonymous", message: saved.message, createdAt: saved.created_at,
         });
       } catch (error) {
         socket.emit("chat:error", { message: error.message });
@@ -597,10 +525,9 @@ export default function setupSocketEvents(io) {
                   if (triviaGame.waitingTimeoutId) clearTimeout(triviaGame.waitingTimeoutId);
                   delete activeTriviaGames[matchId];
                 }
-              }, 10000); // 10 second grace period
+              }, 10000);
             }
           }
-          // BUG FIX 2: Removed instantaneous auto-forfeit to survive React Strict Mode disconnects!
         }
 
         // QUICK DRAW CLEANUP
@@ -621,16 +548,12 @@ export default function setupSocketEvents(io) {
               quickDrawGame.cleanupTimeoutId = setTimeout(() => {
                 if (activeGames[matchId]) {
                   if (quickDrawGame.timerInterval) clearInterval(quickDrawGame.timerInterval);
-                  if (quickDrawGame.waitingTimeoutId) {
-                    clearTimeout(quickDrawGame.waitingTimeoutId);
-                    quickDrawGame.waitingTimeoutId = null;
-                  }
+                  if (quickDrawGame.waitingTimeoutId) clearTimeout(quickDrawGame.waitingTimeoutId);
                   delete activeGames[matchId];
                 }
-              }, 10000); // 10 second grace period
+              }, 10000);
             }
           }
-          // BUG FIX 2: Removed instantaneous auto-forfeit here too!
         }
       }
     });

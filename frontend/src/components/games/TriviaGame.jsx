@@ -1,24 +1,3 @@
-// ============================================================
-// TRIVIA GAME — Real-time trivia match
-// ============================================================
-//
-// GAME STATES:
-//   waiting   → joined room, waiting for opponent / game to start
-//   playing   → question is on screen, timer is running
-//   answered  → user submitted answer, waiting for feedback
-//   result    → showing correct/wrong for this round
-//   finished  → all questions done, showing final scores
-//
-// EVENTS (matched to backend socketEvents.js):
-//   EMIT:  trivia:join    → { matchId, player1Id, player2Id }
-//   EMIT:  trivia:answer  → { matchId, playerId, answer, timeTakenMs }
-//   ON:    trivia:started → game is about to begin
-//   ON:    trivia:new_question → { question: { text, options }, timerSeconds }
-//   ON:    trivia:answer_feedback → { correct, correctAnswer, points }
-//   ON:    trivia:score_update → { scores: { [playerId]: score } }
-//   ON:    trivia:round_over → { correctAnswer }
-//   ON:    trivia:match_over → { winnerId, scores }
-
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -26,9 +5,6 @@ import { Trophy, Clock, CheckCircle, XCircle } from 'lucide-react'
 import { toast } from 'sonner'
 
 export default function TriviaGame({ socket, matchId, currentUserId, isSpectator }) {
-  // ============================================================
-  // ALL STATE for the trivia game
-  // ============================================================
   const [gameStatus, setGameStatus] = useState('waiting')
   const [question, setQuestion] = useState(null)
   const [timeLeft, setTimeLeft] = useState(0)
@@ -40,21 +16,10 @@ export default function TriviaGame({ socket, matchId, currentUserId, isSpectator
   const [countdown, setCountdown] = useState(3)
   const [hasAnsweredCurrent, setHasAnsweredCurrent] = useState(false)
 
-  const userIdNum = Number(currentUserId);
-  const safeUserId = !isNaN(userIdNum) && userIdNum > 0 ? userIdNum : null;
+  const userIdNum = Number(currentUserId)
+  const safeUserId = !isNaN(userIdNum) && userIdNum > 0 ? userIdNum : null
 
-  // Refs for stable listener cleanup
-  const joinMatchRef = useRef(null);
-  const onStartedRef = useRef(null);
-  const onNewQuestionRef = useRef(null);
-  const onFeedbackRef = useRef(null);
-  const onScoreUpdateRef = useRef(null);
-  const onRoundOverRef = useRef(null);
-  const onMatchOverRef = useRef(null);
-  const onTriviaErrorRef = useRef(null);
-  const onHasAnsweredRef = useRef(null);
-
-  // Countdown timer for starting state
+  // Starting Countdown
   useEffect(() => {
     if (gameStatus !== 'starting') return
     setCountdown(3)
@@ -70,20 +35,34 @@ export default function TriviaGame({ socket, matchId, currentUserId, isSpectator
     return () => clearInterval(interval)
   }, [gameStatus])
 
-  // ============================================================
-  // SOCKET EVENT LISTENERS — set up on mount, clean up on unmount
-  // ============================================================
+  // Smooth Local Timer (No Server Clock Skew)
+  useEffect(() => {
+    if (gameStatus !== 'playing') return
+
+    const tick = () => {
+      if (!questionStartTime) return
+      // Use purely local Date.now() to prevent stuttering
+      const elapsed = Date.now() - questionStartTime
+      const remaining = Math.max(0, Math.ceil((10000 - elapsed) / 1000))
+      setTimeLeft(remaining)
+      if (remaining <= 0) clearInterval(interval)
+    }
+
+    tick()
+    const interval = setInterval(tick, 100) // Fast 100ms tick for buttery smooth updates
+    return () => clearInterval(interval)
+  }, [gameStatus, questionStartTime])
+
+  // Socket Listeners
   useEffect(() => {
     if (!socket || !safeUserId) return
 
-    const onStarted = () => {
-      setGameStatus('starting')
-    }
+    const onStarted = () => setGameStatus('starting')
 
     const onNewQuestion = (data) => {
       socket.emit('trivia:request_scores', { matchId })
       setQuestion(data.question)
-      // FIX: Use LOCAL time, ignore server time to prevent clock skew glitches
+      // FIX: Lock the start time exactly to when the browser receives the event
       setQuestionStartTime(Date.now()) 
       setTimeLeft(data.timerSeconds || 10)
       setSelectedAnswer(null)
@@ -97,15 +76,10 @@ export default function TriviaGame({ socket, matchId, currentUserId, isSpectator
       setGameStatus('result')
     }
 
-    const onScoreUpdate = (data) => {
-      setScores(data.scores)
-    }
+    const onScoreUpdate = (data) => setScores(data.scores)
 
     const onRoundOver = (data) => {
-      setFeedback(prev => {
-        if (prev !== null) return prev;
-        return { correct: false, correctAnswer: data.correctAnswer };
-      });
+      setFeedback(prev => prev !== null ? prev : { correct: false, correctAnswer: data.correctAnswer })
       setGameStatus('result')
     }
 
@@ -115,28 +89,9 @@ export default function TriviaGame({ socket, matchId, currentUserId, isSpectator
       setGameStatus('finished')
     }
 
-    const onTriviaError = (data) => {
-      toast.error(data.message || 'An error occurred');
-    }
-
-    const onHasAnswered = (data) => {
-      setHasAnsweredCurrent(data.hasAnswered);
-    }
-
-    const joinMatch = () => {
-      socket.emit('trivia:join', { matchId, playerId: safeUserId })
-    }
-
-    // Store refs for cleanup
-    onStartedRef.current = onStarted;
-    onNewQuestionRef.current = onNewQuestion;
-    onFeedbackRef.current = onFeedback;
-    onScoreUpdateRef.current = onScoreUpdate;
-    onRoundOverRef.current = onRoundOver;
-    onMatchOverRef.current = onMatchOver;
-    onTriviaErrorRef.current = onTriviaError;
-    onHasAnsweredRef.current = onHasAnswered;
-    joinMatchRef.current = joinMatch;
+    const onTriviaError = (data) => toast.error(data.message || 'An error occurred')
+    
+    const onHasAnswered = (data) => setHasAnsweredCurrent(data.hasAnswered)
 
     socket.on('trivia:started', onStarted)
     socket.on('trivia:new_question', onNewQuestion)
@@ -147,74 +102,44 @@ export default function TriviaGame({ socket, matchId, currentUserId, isSpectator
     socket.on('trivia:error', onTriviaError)
     socket.on('trivia:has_answered', onHasAnswered)
 
-    if (socket.connected) {
-      joinMatch()
-    }
-
+    const joinMatch = () => socket.emit('trivia:join', { matchId, playerId: safeUserId })
+    if (socket.connected) joinMatch()
     socket.on('connect', joinMatch)
 
     return () => {
-      const jm = joinMatchRef.current;
-      if (jm) socket.off('connect', jm);
-      socket.off('trivia:started', onStartedRef.current)
-      socket.off('trivia:new_question', onNewQuestionRef.current)
-      socket.off('trivia:answer_feedback', onFeedbackRef.current)
-      socket.off('trivia:score_update', onScoreUpdateRef.current)
-      socket.off('trivia:round_over', onRoundOverRef.current)
-      socket.off('trivia:match_over', onMatchOverRef.current)
-      socket.off('trivia:error', onTriviaErrorRef.current)
-      socket.off('trivia:has_answered', onHasAnsweredRef.current)
+      socket.off('connect', joinMatch)
+      socket.off('trivia:started', onStarted)
+      socket.off('trivia:new_question', onNewQuestion)
+      socket.off('trivia:answer_feedback', onFeedback)
+      socket.off('trivia:score_update', onScoreUpdate)
+      socket.off('trivia:round_over', onRoundOver)
+      socket.off('trivia:match_over', onMatchOver)
+      socket.off('trivia:error', onTriviaError)
+      socket.off('trivia:has_answered', onHasAnswered)
     }
   }, [socket, matchId, safeUserId])
 
-  // ============================================================
-  // TIMER — server-authoritative, uses questionStartTime
-  // ============================================================
-  useEffect(() => {
-    if (gameStatus !== 'playing') return
-
-    const tick = () => {
-      if (!questionStartTime) return
-      // Now both are local, so math is perfect
-      const elapsed = Date.now() - questionStartTime 
-      const remaining = Math.max(0, Math.ceil((10000 - elapsed) / 1000))
-      setTimeLeft(remaining)
-    }
-
-    tick()
-    const interval = setInterval(tick, 500) // Changed to 500ms so it updates smoother
-    return () => clearInterval(interval)
-  }, [gameStatus, questionStartTime])
-
-  // ============================================================
-  // HANDLER: User clicks an answer
-  // ============================================================
   const handleAnswer = useCallback((answer) => {
-    if (gameStatus !== 'playing' || selectedAnswer) return  // prevent double-click
+    if (gameStatus !== 'playing' || selectedAnswer || isSpectator) return
 
     setSelectedAnswer(answer)
     setGameStatus('answered')
-
-    // Calculate how long the user took (for scoring)
+    
+    // Time taken calculates exactly how fast they clicked for point scaling
     const timeTakenMs = Date.now() - questionStartTime
 
-    // EMIT to backend
     socket.emit('trivia:answer', {
       matchId,
-      playerId: Number(currentUserId),
+      playerId: safeUserId,
       answer,
       timeTakenMs,
     })
-  }, [gameStatus, selectedAnswer, socket, matchId, currentUserId, questionStartTime])
+  }, [gameStatus, selectedAnswer, socket, matchId, safeUserId, questionStartTime, isSpectator])
 
-  // ============================================================
-  // RENDER — different UI for each game state
-  // ============================================================
-
-  // WAITING state
+  // WAITING UI
   if (gameStatus === 'waiting' || gameStatus === 'starting') {
     return (
-      <Card className="max-w-lg mx-auto border-neutral-800 bg-neutral-950/40">
+      <Card className="max-w-lg mx-auto border-neutral-800 bg-neutral-950/40 mt-8">
         <CardContent className="p-8 text-center space-y-4">
           {isSpectator && (
             <div className="bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs font-bold px-3 py-1 rounded-full w-max mx-auto uppercase tracking-wider animate-pulse">
@@ -228,38 +153,46 @@ export default function TriviaGame({ socket, matchId, currentUserId, isSpectator
           {gameStatus === 'starting' && !isSpectator && countdown > 0 && (
             <p className="text-4xl font-black text-amber-500 animate-pulse">{countdown}...</p>
           )}
-          <p className="text-neutral-400 text-sm">Get ready for the Trivia Showdown!</p>
         </CardContent>
       </Card>
     )
   }
 
-  // FINISHED state
+  // FINISHED UI
   if (gameStatus === 'finished' && finalResult) {
-    const isWinner = finalResult.winnerId === Number(currentUserId)
+    const isWinner = finalResult.winnerId === safeUserId
     return (
-      <Card className="max-w-lg mx-auto border-neutral-800 bg-neutral-950/40">
+      <Card className="max-w-lg mx-auto border-neutral-800 bg-neutral-950/40 mt-8">
         <CardContent className="p-8 text-center space-y-4">
           <Trophy className={`h-12 w-12 mx-auto mb-2 ${isWinner && !isSpectator ? 'text-amber-500 animate-pulse' : 'text-neutral-600'}`} />
           <h2 className="text-2xl font-black tracking-tight text-neutral-100">
             {isSpectator ? 'Match Finished' : (isWinner ? 'You Won!' : 'Game Over')}
           </h2>
-          <div className="text-neutral-400 space-y-2 bg-neutral-900/60 p-4 rounded-lg border border-neutral-800/80">
+          <div className="text-neutral-400 space-y-2 bg-neutral-900/60 p-4 rounded-lg border border-neutral-800/80 mb-6">
             {Object.entries(scores).map(([playerId, score]) => (
-              <div key={playerId} className={`flex justify-between items-center py-1 border-b border-neutral-800 last:border-0 ${Number(playerId) === Number(currentUserId) ? 'text-amber-400 font-bold' : 'text-neutral-300'}`}>
-                <span>{Number(playerId) === Number(currentUserId) ? 'You' : `Player ${playerId}`}</span>
-                <span>{score} pts</span>
+              <div key={playerId} className={`flex justify-between items-center py-2 border-b border-neutral-800 last:border-0 ${Number(playerId) === safeUserId ? 'text-amber-400 font-bold' : 'text-neutral-300'}`}>
+                <span>{Number(playerId) === safeUserId ? 'You' : `Player ${playerId}`}</span>
+                <span className="bg-neutral-950 px-3 py-1 rounded-md">{score} pts</span>
               </div>
             ))}
           </div>
+          
+          {/* Add this button so the user is not stuck! */}
+          <Button 
+            className="w-full bg-amber-500 hover:bg-amber-600 text-neutral-950 font-bold mt-4"
+            onClick={() => window.location.href = '/tournaments'}
+          >
+            Return to Dashboard
+          </Button>
+
         </CardContent>
       </Card>
     )
   }
 
-  // PLAYING / ANSWERED / RESULT states
+  // ACTIVE PLAYING UI
   return (
-    <Card className="max-w-lg mx-auto border-neutral-850 bg-gradient-to-b from-neutral-900 to-neutral-950 shadow-xl">
+    <Card className="max-w-lg mx-auto border-neutral-850 bg-gradient-to-b from-neutral-900 to-neutral-950 shadow-xl mt-8">
       <CardContent className="p-6 space-y-6">
         {isSpectator && (
           <div className="bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs font-bold py-1.5 rounded-md text-center uppercase tracking-wider animate-pulse">
@@ -267,31 +200,31 @@ export default function TriviaGame({ socket, matchId, currentUserId, isSpectator
           </div>
         )}
 
-        {/* Score bar */}
         <div className="flex justify-between items-center text-sm text-neutral-400 border-b border-neutral-800/60 pb-3">
-          <span>{isSpectator ? 'Spectating' : `Your Score: ${scores[currentUserId] || 0}`}</span>
-          <div className="flex items-center gap-1.5 bg-neutral-900 px-2.5 py-1 rounded-full border border-neutral-800">
-            <Clock className={`h-3.5 w-3.5 ${timeLeft <= 3 ? 'text-red-500 animate-pulse' : 'text-amber-400'}`} />
-            <span className={timeLeft <= 3 ? 'text-red-500 font-extrabold' : 'font-mono'}>{timeLeft}s</span>
+          <span className="font-semibold text-neutral-200">
+            {isSpectator ? 'Spectating' : `Score: ${scores[safeUserId] || 0}`}
+          </span>
+          <div className="flex items-center gap-1.5 bg-neutral-950 px-3 py-1 rounded-full border border-neutral-800">
+            <Clock className={`h-4 w-4 ${timeLeft <= 3 ? 'text-red-500 animate-pulse' : 'text-amber-400'}`} />
+            <span className={`font-mono text-base ${timeLeft <= 3 ? 'text-red-500 font-black' : 'text-neutral-200'}`}>
+              {timeLeft}s
+            </span>
           </div>
         </div>
 
-        {/* Question text */}
         {question && (
           <div className="space-y-4">
             <h2 className="text-lg font-bold text-neutral-100 leading-snug">{question.text}</h2>
 
-            {/* Answer options */}
-            <div className="grid grid-cols-1 gap-2.5">
+            <div className="grid grid-cols-1 gap-3">
               {question.options.map((option, i) => {
-                // Determine button styling based on game state
                 let variant = 'outline'
+                let customStyle = 'bg-neutral-900/50 border-neutral-800 hover:bg-neutral-800 hover:text-neutral-100'
                 let icon = null
-                let customStyle = ''
 
                 if (gameStatus === 'result' && feedback) {
                   if (option === feedback.correctAnswer) {
-                    variant = 'default'  // highlight correct answer
+                    variant = 'default'
                     customStyle = 'bg-emerald-500/20 border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/20 hover:text-emerald-400'
                     icon = <CheckCircle className="h-4 w-4 text-emerald-400 shrink-0" />
                   } else if (option === selectedAnswer && !feedback.correct) {
@@ -299,28 +232,27 @@ export default function TriviaGame({ socket, matchId, currentUserId, isSpectator
                     icon = <XCircle className="h-4 w-4 text-red-400 shrink-0" />
                   }
                 } else if (option === selectedAnswer) {
-                  variant = 'secondary'  // highlight selected
-                  customStyle = 'bg-amber-500/10 border-amber-500/30 text-amber-400'
+                  variant = 'secondary'
+                  customStyle = 'bg-amber-500/20 border-amber-500/40 text-amber-400 hover:bg-amber-500/20 hover:text-amber-400'
                 }
 
                 return (
                   <Button
                     key={i}
                     variant={variant}
-                    className={`justify-start gap-2.5 h-auto py-3.5 px-4 text-left border border-neutral-800/80 hover:border-neutral-700/80 transition-all ${customStyle}`}
+                    className={`justify-start gap-3 h-auto py-4 px-5 text-left border transition-all ${customStyle}`}
                     onClick={() => handleAnswer(option)}
-                    disabled={gameStatus !== 'playing' || isSpectator}
+                    disabled={gameStatus !== 'playing' || isSpectator || selectedAnswer !== null}
                   >
                     {icon}
-                    {option}
+                    <span className="text-sm font-medium">{option}</span>
                   </Button>
                 )
               })}
             </div>
 
-            {/* Feedback message */}
             {gameStatus === 'result' && feedback && (
-              <div className={`text-center text-sm font-semibold rounded-lg p-3 ${feedback.correct ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-red-500/10 text-red-400 border border-red-500/20'}`}>
+              <div className={`text-center text-sm font-bold rounded-lg p-3 animate-in fade-in zoom-in duration-200 ${feedback.correct ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-red-500/10 text-red-400 border border-red-500/20'}`}>
                 {feedback.correct ? `Correct! +${feedback.points} pts` : `Round Over! Correct Answer: ${feedback.correctAnswer}`}
               </div>
             )}
