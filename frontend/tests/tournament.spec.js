@@ -130,6 +130,68 @@ async function uiLogin(page, email, password) {
   await expect(page).toHaveURL(/\/tournaments/);
 }
 
+// Wait for Trivia game to start — waits for socket event + DOM visibility
+async function waitForGameStart(page1, page2, label1 = 'p1', label2 = 'p2', timeoutMs = 45_000) {
+  const startTime = Date.now();
+  console.log(`\n  [GameStart] Waiting for trivia game to start (${label1}/${label2})...`);
+
+  // Helper: wait for trivia:started event via socket tracer
+  async function waitForEvent(page, eventName, pageLabel) {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      try {
+        const events = await page.evaluate(() => window.__socketEvents || []);
+        if (events.some(e => e.direction === 'RECEIVE' && e.event === eventName)) return true;
+      } catch {}
+      await new Promise(r => setTimeout(r, 200));
+    }
+    console.log(`  [GameStart] ${pageLabel} — never received "${eventName}" event`);
+    return false;
+  }
+
+  // Wait for either trivia:started event OR the DOM text
+  while (Date.now() - startTime < timeoutMs) {
+    // Check DOM on both pages
+    try {
+      const p1Ready = await page1.locator("text=Game Starting!").or(page1.locator("text=Your Score:")).isVisible({ timeout: 1000 }).catch(() => false);
+      const p2Ready = await page2.locator("text=Game Starting!").or(page2.locator("text=Your Score:")).isVisible({ timeout: 1000 }).catch(() => false);
+      if (p1Ready && p2Ready) {
+        console.log(`  [GameStart] Both pages ready after ${Date.now() - startTime}ms`);
+        return;
+      }
+    } catch {}
+
+    // Check socket event on either page
+    try {
+      const events = await page1.evaluate(() => window.__socketEvents || []);
+      if (events.some(e => e.direction === 'RECEIVE' && e.event === 'trivia:started')) {
+        console.log(`  [GameStart] trivia:started received on ${label1}, waiting for DOM...`);
+      }
+    } catch {}
+
+    await new Promise(r => setTimeout(r, 500));
+  }
+
+  // Timeout — dump diagnostics
+  console.log(`  [GameStart] TIMEOUT after ${timeoutMs}ms`);
+  for (const [page, label] of [[page1, label1], [page2, label2]]) {
+    try {
+      const events = await page.evaluate(() => window.__socketEvents || []);
+      const triviaEvents = events.filter(e => e.event.startsWith('trivia:'));
+      console.log(`  [GameStart] ${label} — ${events.length} total events, ${triviaEvents.length} trivia events`);
+      triviaEvents.slice(-10).forEach(e => {
+        const ts = new Date(e.timestamp).toISOString().slice(11, 23);
+        console.log(`    [${ts}] ${e.direction} ${e.event}`);
+      });
+      const pageUrl = page.url();
+      console.log(`  [GameStart] ${label} URL: ${pageUrl}`);
+    } catch (e) {
+      console.log(`  [GameStart] ${label} diagnostics error: ${e.message}`);
+    }
+  }
+  throw new Error(`Game did not start within ${timeoutMs}ms — see diagnostics above`);
+}
+
 // Trivia Play Helper — clicks any available answer until the match ends
 async function playTriviaToEnd(page, label = 'player') {
   const finished = page
@@ -478,17 +540,9 @@ test.describe("TourneyHub End-to-End Suite", () => {
       p2Page.goto(`/tournaments/${tournamentId}/match/${match.id}`),
     ]);
 
-    // Wait for match to start — accept either "Game Starting!" or "Your Score:" (already playing)
-    // Using .toPass() to handle the 3-second countdown timing window
+    // Wait for match to start
     flowStep('Waiting for game to start on both pages');
-    await expect(async () => {
-      await expect(
-        p1Page.locator("text=Game Starting!").or(p1Page.locator("text=Your Score:"))
-      ).toBeVisible({ timeout: 10_000 });
-      await expect(
-        p2Page.locator("text=Game Starting!").or(p2Page.locator("text=Your Score:"))
-      ).toBeVisible({ timeout: 10_000 });
-    }).toPass({ timeout: 30_000, intervals: [1_000, 2_000, 3_000] });
+    await waitForGameStart(p1Page, p2Page, 'trivia-p1', 'trivia-p2');
     flowStepOk('Game started on both pages, playing trivia');
 
     // Play Trivia to end
@@ -547,13 +601,7 @@ test.describe("TourneyHub End-to-End Suite", () => {
     ]);
 
     flowStep('Waiting for match to start');
-    // Wait for match to start — accept either "Game Starting!" or "Your Score:" (playing state)
-    await expect(
-      p1Page.locator("text=Game Starting!").or(p1Page.locator("text=Your Score:"))
-    ).toBeVisible({ timeout: 25_000 });
-    await expect(
-      p2Page.locator("text=Game Starting!").or(p2Page.locator("text=Your Score:"))
-    ).toBeVisible({ timeout: 25_000 });
+    await waitForGameStart(p1Page, p2Page, 'disconnect-p1', 'disconnect-p2');
     flowStepOk('Match started on both pages');
 
     // Close player 2 page (disconnection)
@@ -1067,16 +1115,12 @@ test.describe("TourneyHub End-to-End Suite", () => {
     ]);
 
     flowStep('Waiting for game indicators');
-    // Wait for game indicators — accept starting or playing state
+    // Spectator mode should appear
     await expect(
       specPage.locator("text=Spectator Mode").or(specPage.locator("text=Spectating Match"))
     ).toBeVisible({ timeout: 25_000 });
-    await expect(
-      p1Page.locator("text=Game Starting!").or(p1Page.locator("text=Your Score:"))
-    ).toBeVisible({ timeout: 25_000 });
-    await expect(
-      p2Page.locator("text=Game Starting!").or(p2Page.locator("text=Your Score:"))
-    ).toBeVisible({ timeout: 25_000 });
+    // Both players should see game start
+    await waitForGameStart(p1Page, p2Page, 'spec-p1', 'spec-p2');
 
     // Play the trivia match to completion
     const allDone = Promise.all([

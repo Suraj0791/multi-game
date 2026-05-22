@@ -191,12 +191,39 @@ export default function setupSocketEvents(io) {
     socket.on("trivia:join", async (data) => {
       const { matchId, playerId } = data;
       const numericPlayerId = Number(playerId);
+      console.log(`[Trivia] trivia:join received — matchId=${matchId}, playerId=${numericPlayerId}`);
       if (isNaN(numericPlayerId) || !matchId) {
         socket.emit("error", { message: "Invalid payload" });
         return;
       }
 
       try {
+        // PRE-CHECK: game already exists? Skip DB query if so.
+        const preGame = activeTriviaGames[matchId];
+        if (preGame) {
+          console.log(`[Trivia] Pre-check: game exists for match ${matchId}, joinedPlayerIds=${[...preGame.joinedPlayerIds].join(',')}`);
+          const roomName = `match_${matchId}`;
+          const roomName = `match_${matchId}`;
+          socket.join(roomName);
+          socket.data = socket.data || {};
+          socket.data.matchId = matchId;
+          const isPlayer = numericPlayerId === preGame.player1Id || numericPlayerId === preGame.player2Id;
+          if (isPlayer) {
+            preGame.joinedPlayerIds.add(numericPlayerId);
+            socket.data.playerId = numericPlayerId;
+          }
+          if (!preGame.hasStarted && preGame.joinedPlayerIds.size === 2) {
+            preGame.hasStarted = true;
+            if (preGame.waitingTimeoutId) { clearTimeout(preGame.waitingTimeoutId); preGame.waitingTimeoutId = null; }
+            console.log(`[Trivia] Starting game for match ${matchId} (pre-check path)`);
+            io.to(roomName).emit("trivia:started", { message: "Game starting in 3 seconds!" });
+            preGame.timeoutId = setTimeout(() => {
+              sendNextTriviaQuestion(io, matchId, preGame.player1Id, preGame.player2Id);
+            }, 3000);
+          }
+          return;
+        }
+
         const match = await getMatchById(matchId);
         if (!match) {
           socket.emit("error", { message: "Match not found" });
@@ -209,8 +236,9 @@ export default function setupSocketEvents(io) {
         socket.data = socket.data || {};
         socket.data.matchId = matchId;
 
-        // ALWAYS initialize game if it doesn't exist
+        // DOUBLE-CHECK: another handler may have created the game while we awaited getMatchById
         if (!activeTriviaGames[matchId]) {
+          console.log(`[Trivia] Creating new game for match ${matchId}`);
           activeTriviaGames[matchId] = new TriviaGame(
             matchId,
             match.player_1_id,
@@ -246,6 +274,7 @@ export default function setupSocketEvents(io) {
         if (!game.hasStarted) {
           if (game.joinedPlayerIds.size === 2) {
             game.hasStarted = true;
+            console.log(`[Trivia] Starting game for match ${matchId} — both players joined`);
 
             if (game.waitingTimeoutId) {
               clearTimeout(game.waitingTimeoutId);
@@ -260,9 +289,11 @@ export default function setupSocketEvents(io) {
               sendNextTriviaQuestion(io, matchId, match.player_1_id, match.player_2_id);
             }, 3000);
           } else if (isPlayer) {
+            console.log(`[Trivia] Player ${numericPlayerId} waiting — joinedPlayerIds=${[...game.joinedPlayerIds].join(',')}`);
             // Set auto-cancel timer (30 seconds)
             game.waitingTimeoutId = setTimeout(() => {
               const rName = `match_${matchId}`;
+              console.log(`[Trivia] Match ${matchId} cancelled: opponent didn't join in time (only ${game.joinedPlayerIds.size}/2 joined)`);
               io.to(rName).emit("error", { 
                 message: "Match cancelled: Opponent didn't join in time" 
               });
@@ -375,6 +406,36 @@ export default function setupSocketEvents(io) {
       }
 
       try {
+        // PRE-CHECK: game already exists? Skip DB query.
+        const preGame = activeGames[matchId];
+        if (preGame) {
+          const roomName = `match_${matchId}`;
+          socket.join(roomName);
+          socket.data = socket.data || {};
+          socket.data.matchId = matchId;
+          socket.data.playerId = numericPlayerId;
+          const isPlayer = numericPlayerId === preGame.player1Id || numericPlayerId === preGame.player2Id;
+          if (isPlayer && !preGame.joinedPlayerIds.has(numericPlayerId)) {
+            preGame.joinedPlayerIds.add(numericPlayerId);
+          }
+          if (!preGame.hasStarted && preGame.joinedPlayerIds.size >= 2) {
+            preGame.hasStarted = true;
+            if (preGame.waitingTimeoutId) { clearTimeout(preGame.waitingTimeoutId); preGame.waitingTimeoutId = null; }
+            preGame.startTime = Date.now();
+            io.to(roomName).emit("game_status", { message: "Match started!", startTime: preGame.startTime, timeLimit: preGame.timeLimit });
+            io.to(roomName).emit("quickdraw:timer", { timeRemaining: preGame.timeRemaining, startTime: preGame.startTime, timeLimit: preGame.timeLimit });
+            // Start timer, assign drawer, etc.
+            const socketsInRoom = await io.in(roomName).fetchSockets();
+            for (const sock of socketsInRoom) {
+              if (Number(sock.data.playerId) === Number(preGame.drawerId)) {
+                sock.emit("game_status", { message: "You are the drawer. Start drawing!", wordToDraw: preGame.wordToDraw });
+                break;
+              }
+            }
+          }
+          return;
+        }
+
         const match = await getMatchById(matchId);
         if (!match) {
           socket.emit("error", { message: "Match not found" });
@@ -387,7 +448,7 @@ export default function setupSocketEvents(io) {
         socket.data = socket.data || {};
         socket.data.matchId = matchId;
 
-        // ALWAYS initialize game if it doesn't exist
+        // DOUBLE-CHECK: another handler may have created the game while we awaited
         if (!activeGames[matchId]) {
           activeGames[matchId] = {
             wordToDraw: getRandomWord(),

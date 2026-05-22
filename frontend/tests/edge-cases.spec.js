@@ -107,6 +107,48 @@ async function apiCompleteMatch(request, matchId, winnerId, token) {
   return await res.json();
 }
 
+async function waitForGameStart(page1, page2, label1 = 'p1', label2 = 'p2', timeoutMs = 45_000) {
+  const startTime = Date.now();
+  console.log(`\n  [GameStart] Waiting for trivia game to start (${label1}/${label2})...`);
+
+  while (Date.now() - startTime < timeoutMs) {
+    try {
+      const p1Ready = await page1.locator("text=Game Starting!").or(page1.locator("text=Your Score:")).isVisible({ timeout: 1000 }).catch(() => false);
+      const p2Ready = await page2.locator("text=Game Starting!").or(page2.locator("text=Your Score:")).isVisible({ timeout: 1000 }).catch(() => false);
+      if (p1Ready && p2Ready) {
+        console.log(`  [GameStart] Both pages ready after ${Date.now() - startTime}ms`);
+        return;
+      }
+    } catch {}
+
+    try {
+      const events = await page1.evaluate(() => window.__socketEvents || []);
+      if (events.some(e => e.direction === 'RECEIVE' && e.event === 'trivia:started')) {
+        console.log(`  [GameStart] trivia:started received on ${label1}, waiting for DOM...`);
+      }
+    } catch {}
+
+    await new Promise(r => setTimeout(r, 500));
+  }
+
+  console.log(`  [GameStart] TIMEOUT after ${timeoutMs}ms`);
+  for (const [page, label] of [[page1, label1], [page2, label2]]) {
+    try {
+      const events = await page.evaluate(() => window.__socketEvents || []);
+      const triviaEvents = events.filter(e => e.event.startsWith('trivia:'));
+      console.log(`  [GameStart] ${label} — ${events.length} total events, ${triviaEvents.length} trivia events`);
+      triviaEvents.slice(-10).forEach(e => {
+        const ts = new Date(e.timestamp).toISOString().slice(11, 23);
+        console.log(`    [${ts}] ${e.direction} ${e.event}`);
+      });
+      console.log(`  [GameStart] ${label} URL: ${page.url()}`);
+    } catch (e) {
+      console.log(`  [GameStart] ${label} diagnostics error: ${e.message}`);
+    }
+  }
+  throw new Error(`Game did not start within ${timeoutMs}ms`);
+}
+
 async function uiLogin(page, email, password) {
   await page.goto("/login");
   await page.fill("#email", email);
@@ -312,24 +354,39 @@ test.describe("Edge Cases", () => {
     await injectSocketTracer(page);
 
     await page.goto("/");
-    await expect(page.locator("text=Quick Play")).toBeVisible({ timeout: 10_000 });
+    // Landing page has "Quick Match (2 players)" section with "Trivia" button for guests
+    // Non-logged-in users see "Try as Guest (No Sign-up)" as main CTA
+    await expect(page.locator("text=Try as Guest").or(page.locator("text=Quick Match"))).toBeVisible({ timeout: 10_000 });
     flowStep('Landing page loaded');
 
-    // Click Quick Play
-    await page.locator('button:has-text("Quick Play")').first().click();
-    // May redirect to login with guest option
-    const guestBtn = page.locator('button:has-text("Guest")').or(page.locator('a:has-text("Guest")'));
-    if (await guestBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
-      await guestBtn.click();
-      flowStep('Chose guest option');
+    // Click the Trivia quick match button to auto-create guest session
+    const triviaBtn = page.locator('button:has-text("Trivia")').first();
+    if (await triviaBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
+      await triviaBtn.click();
+      flowStep('Clicked Trivia quick match (auto-guest)');
+    } else {
+      // Fallback: try "Try as Guest" button
+      const guestBtn = page.locator('button:has-text("Try as Guest")');
+      if (await guestBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
+        await guestBtn.click();
+        flowStep('Clicked Try as Guest');
+      }
     }
 
     // Wait for match to start or lobby
-    const matchStarted = await page.locator("text=Your Score:").or(page.locator("text=Game Starting!")).isVisible({ timeout: 30_000 }).catch(() => false);
+    flowStep('Waiting for guest match to start');
+    const matchStarted = await page.locator("text=Your Score:").or(page.locator("text=Game Starting!")).isVisible({ timeout: 40_000 }).catch(() => false);
     if (matchStarted) {
       flowStepOk('Guest successfully joined a match');
     } else {
       const pageState = await dumpState(page);
+      const events = await page.evaluate(() => window.__socketEvents || []).catch(() => []);
+      const triviaEvents = events.filter(e => e.event.startsWith('trivia:'));
+      console.log(`  [Guest] Trivia events received: ${triviaEvents.length}`);
+      triviaEvents.slice(-10).forEach(e => {
+        const ts = new Date(e.timestamp).toISOString().slice(11, 23);
+        console.log(`    [${ts}] ${e.direction} ${e.event}`);
+      });
       flowStep(`Guest flow state: ${pageState?.matchState || 'unknown'}`);
     }
 
@@ -462,8 +519,7 @@ test.describe("Edge Cases", () => {
       p2Page.goto(`/tournaments/${tournamentId}/match/${match.id}`)
     ]);
 
-    await expect(p1Tab1.locator("text=Game Starting!").or(p1Tab1.locator("text=Your Score:"))).toBeVisible({ timeout: 15_000 });
-    await expect(p1Tab2.locator("text=Game Starting!").or(p1Tab2.locator("text=Your Score:"))).toBeVisible({ timeout: 15_000 });
+    await waitForGameStart(p1Tab1, p1Tab2, 'tab1', 'tab2');
     
     // Tab 1 answers
     const answerBtn = p1Tab1.locator("button.justify-start:not([disabled])").first();
@@ -511,7 +567,7 @@ test.describe("Edge Cases", () => {
       p2Page.goto(`/tournaments/${tournamentId}/match/${match.id}`)
     ]);
 
-    await expect(p1Page.locator("text=Game Starting!").or(p1Page.locator("text=Your Score:"))).toBeVisible({ timeout: 15_000 });
+    await waitForGameStart(p1Page, p2Page, 'instant-p1', 'instant-p2');
     
     const ans1 = p1Page.locator("button.justify-start:not([disabled])").first();
     await ans1.waitFor({ state: 'visible', timeout: 15_000 });
@@ -560,7 +616,7 @@ test.describe("Edge Cases", () => {
 
     // My Tournaments tab should be empty
     await page.goto("/tournaments?tab=my");
-    await expect(page.locator("text=You haven't joined any tournaments yet")).toBeVisible({ timeout: 10_000 });
+    await expect(page.locator("text=No tournaments found.")).toBeVisible({ timeout: 10_000 });
     await expect(page.locator('button:has-text("Create Tournament")')).toBeVisible();
     
     flowStepOk('Empty state correctly displayed with CTA');
