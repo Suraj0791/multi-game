@@ -35,7 +35,6 @@ export async function webhookHandler(req, res) {
   } catch (error) {
     console.error('Webhook Error:', error.message);
     // Even on error, return 200 to stop Razorpay from retrying endlessly
-    // The error is logged above — you debug from your logs, not by making Razorpay retry
     res.status(200).json({ received: true });
   }
 }
