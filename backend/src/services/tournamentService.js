@@ -18,8 +18,11 @@ export async function createTournament(name, game_type, max_players, entry_fee, 
 
   // Auto-join the host as player 1 in the tournament
   await addPlayer(tournament.id, host_id);
-  // Auto-mark the host as COMPLETED upon auto-joining (exempt from entry fee)
-  await updatePlayerPaymentStatus(tournament.id, host_id, 'COMPLETED');
+  // If the tournament is free, mark the host as COMPLETED automatically
+  // Otherwise, they remain PENDING and must pay the entry fee like any other player
+  if (Number(entry_fee) === 0) {
+    await updatePlayerPaymentStatus(tournament.id, host_id, 'COMPLETED');
+  }
 
   // Return only what the controller needs
   // tournament.max_players NOT tournament.maxPlayers 
