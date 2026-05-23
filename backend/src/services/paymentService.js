@@ -3,6 +3,7 @@ import crypto from 'crypto';
 import { createPaymentOrder, findByRazorpayOrderId, findSucceededPayment, markPaymentSucceeded } from '../models/Payment.js';
 import { getTournamentById } from '../models/Tournament.js';
 import { updatePlayerPaymentStatus } from '../models/TournamentPlayer.js';
+import { getSocketIO } from './notificationService.js';
 
 // Lazy initialization — only creates Razorpay instance when actually needed
 // This prevents the app from crashing if keys aren't set (e.g., during tests)
@@ -102,6 +103,12 @@ export async function handleWebhook(rawBody, signature) {
   await markPaymentSucceeded(razorpayOrderId, razorpayPaymentId);
   //    Mark the player as officially paid in the tournament
   await updatePlayerPaymentStatus(payment.tournament_id, payment.user_id, 'COMPLETED');
+
+  // Emit tournament update socket event
+  const io = getSocketIO();
+  if (io) {
+    io.to(`tournament_${payment.tournament_id}`).emit("tournament:updated");
+  }
 
   return { received: true };
 }

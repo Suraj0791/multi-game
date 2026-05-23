@@ -2,6 +2,7 @@
 // TOURNAMENT DETAIL PAGE
 // ============================================================
 
+import { useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { useTournament } from '@/hooks/useTournaments'
@@ -25,6 +26,37 @@ export default function TournamentDetailPage() {
   // Get current user's ID from Zustand
   const userId = useAuthStore((state) => state.userId)
   const socket = useSocket()
+  const queryClient = useQueryClient()
+
+  // Subscribe to real-time tournament updates (players join/leave/pay, match starts, completions)
+  useEffect(() => {
+    if (!socket || !id) return;
+
+    // Join the tournament room
+    socket.emit("tournament:join", { tournamentId: id });
+
+    const handleTournamentUpdate = () => {
+      console.log("🔄 [TournamentDetailPage] Real-time tournament:updated event received. Refreshing data...");
+      queryClient.invalidateQueries({ queryKey: ['tournament', id] });
+      queryClient.invalidateQueries({ queryKey: ['players', id] });
+      queryClient.invalidateQueries({ queryKey: ['bracket', id] });
+    };
+
+    const handleTournamentStarted = (data) => {
+      console.log("📢 [TournamentDetailPage] Real-time tournament:started event received:", data);
+      queryClient.invalidateQueries({ queryKey: ['tournament', id] });
+      queryClient.invalidateQueries({ queryKey: ['players', id] });
+      queryClient.invalidateQueries({ queryKey: ['bracket', id] });
+    };
+
+    socket.on("tournament:updated", handleTournamentUpdate);
+    socket.on("tournament:started", handleTournamentStarted);
+
+    return () => {
+      socket.off("tournament:updated", handleTournamentUpdate);
+      socket.off("tournament:started", handleTournamentStarted);
+    };
+  }, [socket, id, queryClient]);
 
   // ============================================================
   // SERVER STATE — 3 parallel data fetches
@@ -39,8 +71,6 @@ export default function TournamentDetailPage() {
   const joinMutation = useJoinTournament(id)
   const leaveMutation = useLeaveTournament(id)
   const startMutation = useStartTournament(id)
-
-  const queryClient = useQueryClient()
 
   // ============================================================
   // DERIVED STATE — computed from server state + userId

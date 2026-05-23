@@ -8,7 +8,7 @@ import {
 import { getUserStats, updateUserStats } from "../models/User.js";
 import { calculateNewRatings } from "../utils/eloCalculator.js";
 import { logRatingChange } from "../models/Rating.js";
-import { notify } from "../services/notificationService.js";
+import { notify, getSocketIO } from "../services/notificationService.js";
 import { updateTournamentStatus } from "../models/Tournament.js";
 
 export async function completeMatch(matchId, winnerId) {
@@ -113,6 +113,12 @@ export async function completeMatch(matchId, winnerId) {
       nextRoundNumber,
       nextMatchNumber
     );
+  }
+
+  // Emit tournament update socket event
+  const io = getSocketIO();
+  if (io) {
+    io.to(`tournament_${match.tournament_id}`).emit("tournament:updated");
   }
 
   // If this was the final remaining match, the tournament is complete

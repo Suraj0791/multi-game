@@ -6,6 +6,7 @@ import {
 } from '../models/Tournament.js';
 import { getPlayersByTournament, addPlayer, updatePlayerPaymentStatus } from '../models/TournamentPlayer.js';
 import { createMatch, getMatchesByTournament, updateMatchWinner } from '../models/Match.js';
+import { getSocketIO } from './notificationService.js';
 
 export async function createTournament(name, game_type, max_players, entry_fee, host_id) {
   // Validate required fields (entry_fee can be 0, so we don't check it)
@@ -142,6 +143,21 @@ export async function startTournament(id, host_id) {
 
   // Update status to IN_PROGRESS
   const updatedTournament = await updateTournamentStatus(id, 'IN_PROGRESS');
+
+  // Fetch generated matches to retrieve the first match ID (so players waiting in lobby can transition)
+  const matches = await getTournamentMatches(id);
+  const firstMatchId = matches && matches.length > 0 ? matches[0].id : null;
+
+  // Emit tournament update and start socket events
+  const io = getSocketIO();
+  if (io) {
+    console.log(`📢 Manual start: Broadcasting tournament:started and tournament:updated for tournament ${id}`);
+    io.to(`tournament_${id}`).emit("tournament:started", {
+      tournamentId: Number(id),
+      matchId: firstMatchId ? Number(firstMatchId) : null
+    });
+    io.to(`tournament_${id}`).emit("tournament:updated");
+  }
 
   return {
     message: "Tournament started successfully",

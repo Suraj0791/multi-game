@@ -47,9 +47,9 @@ export default function MatchPage() {
     queryFn: () => getTournamentById(tournamentId),
     enabled: matchId === "waiting",
     refetchInterval: (query) => {
-      // Poll every 2 seconds if in REGISTRATION as a fallback for the socket event
+      // Poll every 10 seconds if in REGISTRATION as a fallback for the socket event
       const data = query.state.data;
-      return data?.status === "IN_PROGRESS" ? false : 2000;
+      return data?.status === "IN_PROGRESS" ? false : 10000;
     },
   });
 

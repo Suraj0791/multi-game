@@ -21,7 +21,22 @@ import ProfilePage from '@/pages/ProfilePage'
 
 // React Query client — manages all API data caching
 // This is created ONCE and shared across the entire app
-const queryClient = new QueryClient()
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: (failureCount, error) => {
+        const status = error?.response?.status;
+        // Do not retry for rate limiting or client-side errors
+        if (status === 429 || status === 404 || status === 401 || status === 403) {
+          return false;
+        }
+        // Otherwise retry up to 3 times
+        return failureCount < 3;
+      },
+      refetchOnWindowFocus: false, // Prevents aggressive automatic refetching on window focus
+    },
+  },
+})
 
 function App() {
   return (
