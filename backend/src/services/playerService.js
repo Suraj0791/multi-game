@@ -38,6 +38,12 @@ export async function joinTournament(tournamentId, playerId) {
     await updatePlayerPaymentStatus(tournamentId, playerId, 'COMPLETED');
   }
 
+  // Emit tournament update socket event
+  const io = getIO();
+  if (io) {
+    io.to(`tournament_${tournamentId}`).emit("tournament:updated");
+  }
+
   // --- AUTO START QUICK MATCH ---
   // If this is a 2-player tournament and is in registration, auto-start it when full
   const finalPlayerCount = await countPlayers(tournamentId);
@@ -115,6 +121,12 @@ export async function leaveTournament(tournamentId, playerId) {
   }
 
   await removePlayer(tournamentId, playerId);
+
+  // Emit tournament update socket event
+  const io = getIO();
+  if (io) {
+    io.to(`tournament_${tournamentId}`).emit("tournament:updated");
+  }
 
   return { left: true, message: 'Left tournament' };
 }

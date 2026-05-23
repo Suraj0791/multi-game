@@ -34,10 +34,10 @@ const corsOptions = {
 app.use(cors(corsOptions));
 
 // Rate Limiting — prevents spam and brute force attacks
-// 100 requests per 15 minutes per IP address (skipped in development/testing)
+// 1500 requests per 15 minutes per IP address (skipped in development/testing)
 const generalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,  // 15 minutes
-  max: process.env.NODE_ENV === 'production' ? 100 : 10000,
+  max: process.env.NODE_ENV === 'production' ? (parseInt(process.env.RATE_LIMIT_MAX) || 1500) : 10000,
   message: { success: false, error: 'Too many requests. Try again in 15 minutes.' },
   standardHeaders: true,      // sends rate limit info in response headers
   skip: () => process.env.NODE_ENV !== 'production',

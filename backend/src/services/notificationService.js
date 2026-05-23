@@ -66,3 +66,8 @@ export async function readAll(userId) {
   const count = await markAllAsRead(userId);
   return { markedRead: count };
 }
+
+// Helper to expose the socket IO instance globally for other services
+export function getSocketIO() {
+  return io;
+}
