@@ -36,11 +36,17 @@ export async function create(req, res) {
 // Handle GET /tournaments/:id — view one tournament
 export async function getOne(req, res) {
   try {
-    // :id from URL goes into req.params (not req.body — it's a GET request)
-    const tournament = await getTournamentById(req.params.id);
+    const id = req.params.id;
+    const cacheKey = `tournament_${id}`;
+    
+    const cachedData = cache.get(cacheKey);
+    if (cachedData) return res.status(200).json(cachedData);
+
+    const tournament = await getTournamentById(id);
+    cache.set(cacheKey, tournament, 10); // 10s TTL
+    
     res.status(200).json(tournament);
   } catch (error) {
-    // "Tournament not found" → 404, other errors → 500
     const status = error.message === 'Tournament not found' ? 404 : 500;
     res.status(status).json({ error: error.message });
   }
@@ -91,7 +97,15 @@ export async function startTournament(req, res) {
 // Handle GET /tournaments/:id/matches
 export async function getMatches(req, res) {
   try {
-    const matches = await getTournamentMatches(req.params.id);
+    const id = req.params.id;
+    const cacheKey = `matches_${id}`;
+    
+    const cachedData = cache.get(cacheKey);
+    if (cachedData) return res.status(200).json(cachedData);
+
+    const matches = await getTournamentMatches(id);
+    cache.set(cacheKey, matches, 10); // 10s TTL
+    
     res.status(200).json(matches);
   } catch (error) {
     const status = error.message.includes('not found') ? 404 : 500;
@@ -102,7 +116,15 @@ export async function getMatches(req, res) {
 // Handle GET /tournaments/:id/bracket
 export async function getBracket(req, res) {
   try {
-    const bracket = await getTournamentBracket(req.params.id);
+    const id = req.params.id;
+    const cacheKey = `bracket_${id}`;
+    
+    const cachedData = cache.get(cacheKey);
+    if (cachedData) return res.status(200).json(cachedData);
+
+    const bracket = await getTournamentBracket(id);
+    cache.set(cacheKey, bracket, 10); // 10s TTL
+    
     res.status(200).json(bracket);
   } catch (error) {
     const status = error.message.includes('not found') ? 404 : 500;

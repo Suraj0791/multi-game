@@ -18,6 +18,12 @@ export async function runMigrations() {
       ADD COLUMN IF NOT EXISTS last_login TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     `);
 
+    // Add performance indexes to fix full-table scans
+    await query(`CREATE INDEX IF NOT EXISTS idx_users_elo_rating ON users(elo_rating DESC)`);
+    await query(`CREATE INDEX IF NOT EXISTS idx_matches_tournament_id ON matches(tournament_id)`);
+    await query(`CREATE INDEX IF NOT EXISTS idx_matches_round ON matches(tournament_id, round_number, match_number)`);
+    await query(`CREATE INDEX IF NOT EXISTS idx_tournament_players_tournament ON tournament_players(tournament_id)`);
+
     console.log('✅ Database migrations completed successfully.');
   } catch (error) {
     console.error('❌ Database migration failed:', error);
