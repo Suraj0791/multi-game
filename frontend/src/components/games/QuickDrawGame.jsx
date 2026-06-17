@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Pencil, Eye, Trophy, Clock, XCircle } from "lucide-react";
 import { toast } from "sonner";
+import useGameStore from "@/stores/gameStore";
 
 const MAX_ATTEMPTS = 5;
 
@@ -25,6 +26,29 @@ export default function QuickDrawGame({
   const [attemptsLeft, setAttemptsLeft] = useState(MAX_ATTEMPTS);
   const [guesses, setGuesses] = useState([]);
   const [countdown, setCountdown] = useState(5);
+  const [opponentLeft, setOpponentLeft] = useState(false);
+  const setActiveGame = useGameStore((s) => s.setActiveGame);
+  const clearActiveGame = useGameStore((s) => s.clearActiveGame);
+
+  // Track active game in global store for Navbar awareness
+  useEffect(() => {
+    if (gameStatus === "playing") {
+      setActiveGame(matchId, null);
+    } else if (gameStatus === "finished" || gameStatus === "waiting") {
+      clearActiveGame();
+    }
+  }, [gameStatus, matchId, setActiveGame, clearActiveGame]);
+
+  // beforeunload warning during active play
+  useEffect(() => {
+    if (gameStatus !== "playing") return;
+    const handler = (e) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [gameStatus]);
 
   // Starting Countdown
   useEffect(() => {
@@ -58,9 +82,12 @@ export default function QuickDrawGame({
   const onTimerRef = useRef(null);
   const onAttemptRef = useRef(null);
   const onGuessAttemptRef = useRef(null);
+  const onOpponentLeftRef = useRef(null);
 
   useEffect(() => {
     if (!socket || !safeUserId) return;
+
+    const guessLimitShownRef = { current: false };
 
     const onGameStatus = (data) => {
       if (data.message && data.message.includes("starting in")) {
@@ -70,6 +97,11 @@ export default function QuickDrawGame({
       setGameStatus("playing");
       if (data.wordToDraw) {
         setWordToDraw(data.wordToDraw);
+      }
+      // Show guess limit toast once when playing starts for guesser
+      if (!isDrawer && !isSpectator && !guessLimitShownRef.current) {
+        guessLimitShownRef.current = true;
+        toast.info(`You have ${MAX_ATTEMPTS} attempts to guess the word!`, { duration: 5000 });
       }
     };
 
@@ -145,6 +177,18 @@ export default function QuickDrawGame({
       toast.error(data.message || "An error occurred");
     };
 
+    const onOpponentDisconnected = (data) => {
+      setOpponentLeft(true);
+      toast.warning(data.message || "Your opponent disconnected. Waiting for reconnection...", {
+        duration: 8000,
+      });
+    };
+
+    const onOpponentReconnected = () => {
+      setOpponentLeft(false);
+      toast.success("Opponent reconnected!");
+    };
+
     const joinMatch = () => {
       socket.emit("join_match", {
         matchId,
@@ -163,6 +207,7 @@ export default function QuickDrawGame({
     onTimerRef.current = onTimer;
     onAttemptRef.current = onAttemptUpdate;
     onGuessAttemptRef.current = onGuessAttempt;
+    onOpponentLeftRef.current = onOpponentDisconnected;
     joinMatchRef.current = joinMatch;
 
     socket.on("game_status", onGameStatus);
@@ -174,6 +219,8 @@ export default function QuickDrawGame({
     socket.on("quickdraw:timer", onTimer);
     socket.on("quickdraw:attempt_update", onAttemptUpdate);
     socket.on("quickdraw:guess_attempt", onGuessAttempt);
+    socket.on("opponent:disconnected", onOpponentDisconnected);
+    socket.on("opponent:reconnected", onOpponentReconnected);
 
     if (socket.connected) {
       joinMatch();
@@ -193,8 +240,11 @@ export default function QuickDrawGame({
       socket.off("quickdraw:timer", onTimerRef.current);
       socket.off("quickdraw:attempt_update", onAttemptRef.current);
       socket.off("quickdraw:guess_attempt", onGuessAttemptRef.current);
+      const od = onOpponentLeftRef.current;
+      if (od) socket.off("opponent:disconnected", od);
+      socket.off("opponent:reconnected", onOpponentReconnected);
     };
-  }, [socket, matchId, safeUserId, player1Id, player2Id]);
+  }, [socket, matchId, safeUserId, player1Id, player2Id, isDrawer, isSpectator]);
 
   // ============================================================
   // CANVAS DRAWING HANDLERS (only for the drawer)
@@ -443,6 +493,24 @@ export default function QuickDrawGame({
         <p className="text-center text-sm text-red-400 font-bold bg-red-500/10 border border-red-500/20 rounded p-2">
           {guessMessage}
         </p>
+      )}
+
+      {/* Opponent disconnected warning */}
+      {opponentLeft && (
+        <Card className="border-yellow-500/30 bg-yellow-500/10">
+          <CardContent className="p-3 text-center">
+            <p className="text-sm font-bold text-yellow-400 animate-pulse">Opponent disconnected — waiting for reconnection...</p>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Low attempts warning */}
+      {gameStatus === "playing" && !isDrawer && !isSpectator && attemptsLeft <= 2 && (
+        <Card className="border-red-500/30 bg-red-500/10">
+          <CardContent className="p-3 text-center">
+            <p className="text-sm font-bold text-red-400">⚠️ Only {attemptsLeft} guess{attemptsLeft !== 1 ? 'es' : ''} left! Guess carefully.</p>
+          </CardContent>
+        </Card>
       )}
 
       {/* Live Guesses feed */}

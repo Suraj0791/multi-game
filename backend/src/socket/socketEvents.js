@@ -184,8 +184,15 @@ export default function setupSocketEvents(io) {
             } else {
               // Kill ghost timers
               if (game.waitingTimeoutId) clearTimeout(game.waitingTimeoutId);
-              game.waitingTimeoutId = setTimeout(() => {
+              game.waitingTimeoutId = setTimeout(async () => {
                 const rName = `match_${matchId}`;
+                // Complete the DB match so tournament isn't stuck
+                if (game.joinedPlayerIds.size > 0) {
+                  const winnerId = [...game.joinedPlayerIds][0];
+                  await completeMatch(matchId, winnerId).catch((err) =>
+                    console.error("Failed to complete timed-out trivia match:", err)
+                  );
+                }
                 io.to(rName).emit("error", {
                   message: "Match cancelled: Opponent didn't join in time"
                 });
@@ -371,8 +378,15 @@ export default function setupSocketEvents(io) {
               }, 5000);
             } else {
               if (game.waitingTimeoutId) clearTimeout(game.waitingTimeoutId);
-              game.waitingTimeoutId = setTimeout(() => {
+              game.waitingTimeoutId = setTimeout(async () => {
                 const rName = `match_${matchId}`;
+                // Complete the DB match so tournament isn't stuck
+                if (game.joinedPlayerIds.size > 0) {
+                  const winnerId = [...game.joinedPlayerIds][0];
+                  await completeMatch(matchId, winnerId).catch((err) =>
+                    console.error("Failed to complete timed-out quick draw match:", err)
+                  );
+                }
                 io.to(rName).emit("error", {
                   message: "Match cancelled: Opponent didn't join in time"
                 });
@@ -551,15 +565,29 @@ export default function setupSocketEvents(io) {
             triviaGame.joinedPlayerIds.delete(playerId);
           }
 
+          // Notify remaining player that opponent disconnected
+          if (triviaGame.hasStarted && triviaGame.joinedPlayerIds.size === 1) {
+            const remainingPlayerId = [...triviaGame.joinedPlayerIds][0];
+            io.to(`match_${matchId}`).emit("opponent:disconnected", {
+              message: "Your opponent lost connection. Waiting for reconnection..."
+            });
+          }
+
           if (triviaGame.joinedPlayerIds.size === 0) {
             if (!triviaGame.cleanupTimeoutId) {
-              triviaGame.cleanupTimeoutId = setTimeout(() => {
+              triviaGame.cleanupTimeoutId = setTimeout(async () => {
                 if (activeTriviaGames[matchId]) {
                   if (triviaGame.timeoutId) clearTimeout(triviaGame.timeoutId);
                   if (triviaGame.waitingTimeoutId) clearTimeout(triviaGame.waitingTimeoutId);
+                  // If game had started, complete the DB match so it's not stuck
+                  if (triviaGame.hasStarted) {
+                    await completeMatch(matchId, triviaGame.player1Id).catch((err) =>
+                      console.error("Failed to complete trivia match after both players left:", err)
+                    );
+                  }
                   delete activeTriviaGames[matchId];
                 }
-              }, 10000);
+              }, 30000);
             }
           }
         }
@@ -577,15 +605,29 @@ export default function setupSocketEvents(io) {
             quickDrawGame.joinedPlayerIds.delete(playerId);
           }
 
+          // Notify remaining player that opponent disconnected
+          if (quickDrawGame.hasStarted && quickDrawGame.joinedPlayerIds.size === 1) {
+            const remainingPlayerId = [...quickDrawGame.joinedPlayerIds][0];
+            io.to(`match_${matchId}`).emit("opponent:disconnected", {
+              message: "Your opponent lost connection. Waiting for reconnection..."
+            });
+          }
+
           if (quickDrawGame.joinedPlayerIds.size === 0) {
             if (!quickDrawGame.cleanupTimeoutId) {
-              quickDrawGame.cleanupTimeoutId = setTimeout(() => {
+              quickDrawGame.cleanupTimeoutId = setTimeout(async () => {
                 if (activeGames[matchId]) {
                   if (quickDrawGame.timerInterval) clearInterval(quickDrawGame.timerInterval);
                   if (quickDrawGame.waitingTimeoutId) clearTimeout(quickDrawGame.waitingTimeoutId);
+                  // If game had started, complete the DB match so it's not stuck
+                  if (quickDrawGame.hasStarted) {
+                    await completeMatch(matchId, quickDrawGame.player1Id).catch((err) =>
+                      console.error("Failed to complete quick draw match after both players left:", err)
+                    );
+                  }
                   delete activeGames[matchId];
                 }
-              }, 10000);
+              }, 30000);
             }
           }
         }

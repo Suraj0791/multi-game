@@ -3,6 +3,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Trophy, Clock, CheckCircle, XCircle } from 'lucide-react'
 import { toast } from 'sonner'
+import useGameStore from '@/stores/gameStore'
 
 export default function TriviaGame({ socket, matchId, currentUserId, isSpectator }) {
   const [gameStatus, setGameStatus] = useState('waiting')
@@ -15,9 +16,32 @@ export default function TriviaGame({ socket, matchId, currentUserId, isSpectator
   const [questionStartTime, setQuestionStartTime] = useState(0)
   const [countdown, setCountdown] = useState(5)
   const [hasAnsweredCurrent, setHasAnsweredCurrent] = useState(false)
+  const [opponentLeft, setOpponentLeft] = useState(false)
 
   const userIdNum = Number(currentUserId)
   const safeUserId = !isNaN(userIdNum) && userIdNum > 0 ? userIdNum : null
+  const setActiveGame = useGameStore((s) => s.setActiveGame)
+  const clearActiveGame = useGameStore((s) => s.clearActiveGame)
+
+  // Track active game in global store for Navbar awareness
+  useEffect(() => {
+    if (gameStatus === "playing") {
+      setActiveGame(matchId, null);
+    } else if (gameStatus === "finished" || gameStatus === "waiting") {
+      clearActiveGame();
+    }
+  }, [gameStatus, matchId, setActiveGame, clearActiveGame]);
+
+  // beforeunload warning during active play
+  useEffect(() => {
+    if (gameStatus !== "playing") return;
+    const handler = (e) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [gameStatus]);
 
   // Starting Countdown
   useEffect(() => {
@@ -93,6 +117,18 @@ export default function TriviaGame({ socket, matchId, currentUserId, isSpectator
     
     const onHasAnswered = (data) => setHasAnsweredCurrent(data.hasAnswered)
 
+    const onOpponentDisconnected = (data) => {
+      setOpponentLeft(true);
+      toast.warning(data.message || "Your opponent disconnected. Waiting for reconnection...", {
+        duration: 8000,
+      });
+    };
+
+    const onOpponentReconnected = () => {
+      setOpponentLeft(false);
+      toast.success("Opponent reconnected!");
+    };
+
     socket.on('trivia:started', onStarted)
     socket.on('trivia:new_question', onNewQuestion)
     socket.on('trivia:answer_feedback', onFeedback)
@@ -101,6 +137,8 @@ export default function TriviaGame({ socket, matchId, currentUserId, isSpectator
     socket.on('trivia:match_over', onMatchOver)
     socket.on('trivia:error', onTriviaError)
     socket.on('trivia:has_answered', onHasAnswered)
+    socket.on('opponent:disconnected', onOpponentDisconnected);
+    socket.on('opponent:reconnected', onOpponentReconnected);
 
     const joinMatch = () => socket.emit('trivia:join', { matchId, playerId: safeUserId })
     if (socket.connected) joinMatch()
@@ -116,6 +154,8 @@ export default function TriviaGame({ socket, matchId, currentUserId, isSpectator
       socket.off('trivia:match_over', onMatchOver)
       socket.off('trivia:error', onTriviaError)
       socket.off('trivia:has_answered', onHasAnswered)
+      socket.off('opponent:disconnected', onOpponentDisconnected)
+      socket.off('opponent:reconnected', onOpponentReconnected)
     }
   }, [socket, matchId, safeUserId])
 
@@ -192,7 +232,15 @@ export default function TriviaGame({ socket, matchId, currentUserId, isSpectator
 
   // ACTIVE PLAYING UI
   return (
-    <Card className="max-w-lg mx-auto border-neutral-850 bg-gradient-to-b from-neutral-900 to-neutral-950 shadow-xl mt-8">
+    <div className="max-w-lg mx-auto space-y-2">
+      {opponentLeft && (
+        <Card className="border-yellow-500/30 bg-yellow-500/10">
+          <CardContent className="p-3 text-center">
+            <p className="text-sm font-bold text-yellow-400 animate-pulse">Opponent disconnected — waiting for reconnection...</p>
+          </CardContent>
+        </Card>
+      )}
+    <Card className="border-neutral-850 bg-gradient-to-b from-neutral-900 to-neutral-950 shadow-xl">
       <CardContent className="p-6 space-y-6">
         {isSpectator && (
           <div className="bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs font-bold py-1.5 rounded-md text-center uppercase tracking-wider animate-pulse">
@@ -260,5 +308,6 @@ export default function TriviaGame({ socket, matchId, currentUserId, isSpectator
         )}
       </CardContent>
     </Card>
+    </div>
   )
 }
