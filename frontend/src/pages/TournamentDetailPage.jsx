@@ -19,7 +19,7 @@ import BracketView from '@/components/bracket/BracketView'
 import ChatPanel from '@/components/chat/ChatPanel'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { CheckCircle2, Clock3, Copy, Swords, Users } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, Clock3, Copy, Swords, Users } from 'lucide-react'
 
 export default function TournamentDetailPage() {
   // Get the tournament ID from the URL (/tournaments/:id)
@@ -28,6 +28,7 @@ export default function TournamentDetailPage() {
 
   // Get current user's ID from Zustand
   const userId = useAuthStore((state) => state.userId)
+  const isGuest = useAuthStore((state) => state.isGuest)
   const socket = useSocket()
   const queryClient = useQueryClient()
 
@@ -84,7 +85,7 @@ export default function TournamentDetailPage() {
   const isHost = tournament?.hostId === Number(userId)
   const playersList = players || []
   const hasJoined = playersList.some(p => p.playerId === Number(userId))
-  const canJoin = !hasJoined && tournament?.status === 'REGISTRATION' && playersList.length < (tournament?.maxPlayers || 8)
+  const canJoin = !hasJoined && tournament?.status === 'REGISTRATION' && playersList.length < (tournament?.maxPlayers || 8) && !(isGuest && tournament?.entryFee > 0)
   const canLeave = hasJoined && tournament?.status === 'REGISTRATION' && !isHost
   const showBracket = tournament?.status !== 'REGISTRATION'
 
@@ -217,6 +218,13 @@ export default function TournamentDetailPage() {
         isLeaving={leaveMutation.isPending}
         isStarting={startMutation.isPending}
       />
+
+      {isGuest && tournament?.entryFee > 0 && !hasJoined && tournament?.status === 'REGISTRATION' && (
+        <div className="flex items-start gap-2 rounded-lg border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-sm text-amber-200">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>Guest accounts cannot join paid tournaments. Please register a free account.</span>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
         <main className="min-w-0">

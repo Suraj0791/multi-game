@@ -8,6 +8,7 @@ import {
   Check,
   Copy,
   IndianRupee,
+  LogOut,
   ShieldCheck,
   Swords,
   Trophy,
@@ -49,12 +50,14 @@ const PRODUCT_POINTS = [
 export default function LandingPage() {
   const navigate = useNavigate()
   const login = useAuthStore((state) => state.login)
+  const logout = useAuthStore((state) => state.logout)
   const token = useAuthStore((state) => state.token)
   const userId = useAuthStore((state) => state.userId)
   const [loading, setLoading] = useState(null)
   const [copied, setCopied] = useState(false)
 
   const handleGuestLogin = async () => {
+    if (token) return
     setLoading('guest')
     try {
       const res = await guestLogin()
@@ -110,6 +113,10 @@ export default function LandingPage() {
                 </Button>
                 <Button variant="outline" size="sm" onClick={() => navigate(`/profile/${userId}`)}>
                   Profile
+                </Button>
+                <Button variant="ghost" size="sm" onClick={logout} className="gap-1.5 text-muted-foreground hover:text-foreground">
+                  <LogOut className="h-4 w-4" />
+                  Logout
                 </Button>
               </>
             ) : (
@@ -307,7 +314,7 @@ export default function LandingPage() {
                   Will I lose my stats if I play as a Guest first?
                 </h3>
                 <p className="mt-2 text-sm text-neutral-400 leading-relaxed">
-                  Not at all! If you reach the top of the Global Leaderboard as a Guest, simply click "Get Started" to register. The auth router will seamlessly merge your ephemeral token with your new permanent account, ensuring zero progression loss.
+                  Yes. Guest accounts are ephemeral and designed strictly for frictionless demo testing. They are automatically deleted after 24 hours. To build a permanent ELO rating and join paid tournaments, please register a free Real account.
                 </p>
               </div>
             </div>

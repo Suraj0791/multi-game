@@ -134,7 +134,7 @@ export default function ChatPanel({ socket, tournamentId, userId }) {
                     {!isMe && (
                       <span className="font-medium text-neutral-300 flex items-center gap-1">
                         {msg.username || "Player"}
-                        {msg.username?.startsWith("Player_") && (
+                        {msg.isGuest && (
                           <span className="rounded-sm bg-neutral-800 px-1 text-[9px] uppercase tracking-wide text-neutral-400">Guest</span>
                         )}
                       </span>

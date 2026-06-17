@@ -27,7 +27,7 @@ export async function findPlayer(tournamentId, playerId) {
 // JOIN with users because tournament_players only has player_id (a number)
 export async function getPlayersByTournament(tournamentId) {
   const result = await query(
-    `SELECT tp.*, u.username, u.elo_rating
+    `SELECT tp.*, u.username, u.elo_rating, u.is_guest
      FROM tournament_players tp
      JOIN users u ON tp.player_id = u.id
      WHERE tp.tournament_id = $1

@@ -1,7 +1,7 @@
 
 import { useState } from 'react'
 import { useForm } from 'react-hook-form'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { Trophy } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -11,7 +11,9 @@ import useAuthStore from '@/stores/authStore'
 
 export default function RegisterPage() {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const login = useAuthStore((state) => state.login)
+  const redirectTo = decodeURIComponent(searchParams.get('redirect') || '/tournaments')
 
   const {
     register,
@@ -24,13 +26,11 @@ export default function RegisterPage() {
   const onSubmit = async (data) => {
     setError(null)
     try {
-      // Same as login, but sends username too
       const response = await registerUser(data.username, data.email, data.password)
 
-      // After register, user is auto-logged in (backend returns a token)
       login(response.token, response.userId)
 
-      navigate('/tournaments', { replace: true })
+      navigate(redirectTo, { replace: true })
     } catch (err) {
       setError(err.response?.data?.error || 'Registration failed. Try again.')
     }

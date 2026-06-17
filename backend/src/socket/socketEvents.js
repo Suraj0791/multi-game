@@ -1,3 +1,4 @@
+import jwt from 'jsonwebtoken';
 import { getRandomWord } from "../games/gameConstants.js";
 import { completeMatch } from "../services/matchService.js";
 import { getMatchById } from "../models/Match.js";
@@ -97,6 +98,18 @@ export default function setupSocketEvents(io) {
   ioInstance = io;
 
   io.on("connection", (socket) => {
+    // Verify JWT token on connection
+    const token = socket.handshake.auth?.token;
+    if (token) {
+      try {
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        socket.userId = decoded.userId;
+        socket.isGuest = decoded.isGuest || false;
+      } catch (err) {
+        // Invalid token — socket stays connected but has no verified userId
+      }
+    }
+
     // Join tournament room
     socket.on("tournament:join", (data) => {
       const { tournamentId } = data;
@@ -505,7 +518,7 @@ export default function setupSocketEvents(io) {
       try {
         const saved = await sendMessage(tournamentId, numericUserId, text);
         io.to(`chat_tournament_${tournamentId}`).emit("chat:message", {
-          id: saved.id, userId: saved.user_id, username: chatUsernames[socket.id] || "Anonymous", message: saved.message, createdAt: saved.created_at,
+          id: saved.id, userId: saved.user_id, username: chatUsernames[socket.id] || "Anonymous", isGuest: saved.is_guest || false, message: saved.message, createdAt: saved.created_at,
         });
       } catch (error) {
         socket.emit("chat:error", { message: error.message });

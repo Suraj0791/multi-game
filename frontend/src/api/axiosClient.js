@@ -21,7 +21,8 @@ api.interceptors.response.use(
     if (error.response?.status === 401) {
       localStorage.removeItem('token')
       localStorage.removeItem('userId')
-      window.location.replace('/login')
+      localStorage.removeItem('isGuest')
+      window.dispatchEvent(new CustomEvent('auth:expired'))
     }
     return Promise.reject(error)
   }

@@ -94,6 +94,9 @@ export async function createQuickMatch(gameType) {
     headers,
     body: JSON.stringify({ gameType }),
   });
-  if (!response.ok) throw new Error('Quick match failed');
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.error || 'Quick match failed');
+  }
   return response.json();
 }

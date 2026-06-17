@@ -36,6 +36,7 @@ export async function getChatHistory(tournamentId) {
     id: m.id,
     userId: m.user_id,
     username: m.username,
+    isGuest: m.is_guest || false,
     message: m.message,
     createdAt: m.created_at
   }));

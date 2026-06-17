@@ -11,49 +11,52 @@ const parseJwt = (token) => {
 const getValidAuth = () => {
   const token = localStorage.getItem('token');
   const userId = localStorage.getItem('userId');
+  let isGuest = localStorage.getItem('isGuest');
+
   if (!token || !userId || userId === 'null' || userId === 'undefined') {
-    return { token: null, userId: null };
+    return { token: null, userId: null, isGuest: null };
   }
-  
+
   const decoded = parseJwt(token);
-  // If token is expired or invalid, purge it immediately
   if (!decoded || !decoded.exp || decoded.exp * 1000 < Date.now()) {
     localStorage.removeItem('token');
     localStorage.removeItem('userId');
-    return { token: null, userId: null };
+    localStorage.removeItem('isGuest');
+    return { token: null, userId: null, isGuest: null };
   }
-  
-  return { token, userId };
+
+  // Backward compat: if isGuest not in localStorage, decode from token
+  if (isGuest === null) {
+    isGuest = decoded.isGuest !== undefined ? String(decoded.isGuest) : 'false';
+  }
+
+  return { token, userId, isGuest: isGuest === 'true' };
 };
 
 const initialAuth = getValidAuth();
 
 const useAuthStore = create((set) => ({
-  // STATE — the data we store (validated on boot)
   token: initialAuth.token,
   userId: initialAuth.userId,
+  isGuest: initialAuth.isGuest,
 
-  // DERIVED — computed from state (not stored separately)
-  // We don't store isLoggedIn — we derive it from token !== null
-  // This avoids the bug where token is null but isLoggedIn is somehow true
-
-  // ACTION — login: save token to store + localStorage
-  // Why localStorage? So the user stays logged in after page refresh.
-  // Zustand state disappears on refresh. localStorage persists.
-  login: (token, userId) => {
+  login: (token, userId, isGuest) => {
     if (!token || !userId || String(userId) === 'null' || String(userId) === 'undefined') {
       return;
     }
-    localStorage.setItem('token', token)
-    localStorage.setItem('userId', String(userId))
-    set({ token, userId: String(userId) })
+    const decoded = parseJwt(token);
+    const guest = isGuest !== undefined ? isGuest : (decoded?.isGuest || false);
+    localStorage.setItem('token', token);
+    localStorage.setItem('userId', String(userId));
+    localStorage.setItem('isGuest', String(guest));
+    set({ token, userId: String(userId), isGuest: guest });
   },
 
-  // ACTION — logout: clear everything
   logout: () => {
-    localStorage.removeItem('token')
-    localStorage.removeItem('userId')
-    set({ token: null, userId: null })
+    localStorage.removeItem('token');
+    localStorage.removeItem('userId');
+    localStorage.removeItem('isGuest');
+    set({ token: null, userId: null, isGuest: null });
   },
 }))
 

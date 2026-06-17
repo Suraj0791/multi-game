@@ -12,6 +12,7 @@ export default function LoginPage() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const login = useAuthStore((state) => state.login)
+  const token = useAuthStore((state) => state.token)
   const redirectTo = decodeURIComponent(searchParams.get('redirect') || '/tournaments')
 
   const {
@@ -23,6 +24,7 @@ export default function LoginPage() {
   const [error, setError] = useState(null)
 
   const handleGuestLogin = async () => {
+    if (token) return
     setError(null)
     try {
       const res = await guestLogin()

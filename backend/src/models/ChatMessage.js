@@ -18,7 +18,7 @@ export async function saveMessage(tournamentId, userId, message) {
 // Returns: array of messages (newest last — ready for chat display)
 export async function getMessageHistory(tournamentId, limit = 50) {
   const result = await query(
-    `SELECT cm.id, cm.user_id, u.username, cm.message, cm.created_at
+    `SELECT cm.id, cm.user_id, u.username, u.is_guest, cm.message, cm.created_at
      FROM chat_messages cm
      JOIN users u ON cm.user_id = u.id
      WHERE cm.tournament_id = $1

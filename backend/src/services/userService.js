@@ -17,12 +17,11 @@ export async function registerUser(username, email, password) {
 
   // Step 4: Create a JWT token (so user is logged in immediately after registering)
   const token = jwt.sign(
-    { userId: user.id },           // payload — what data lives inside the token
-    process.env.JWT_SECRET,         // secret key — used to sign/verify the token
-    { expiresIn: '7d' }            // token expires in 7 days
+    { userId: user.id, isGuest: false },
+    process.env.JWT_SECRET,
+    { expiresIn: '7d' }
   );
 
-  // Step 5: Return what the controller needs to send back
   return { userId: user.id, token };
 }
 
@@ -49,17 +48,14 @@ export async function loginUser(email, password) {
     throw new Error('Invalid credentials');  // same message — don't reveal WHICH part was wrong
   }
 
-  // Step 4: Password correct! Create JWT token
   const token = jwt.sign(
-    { userId: user.id },
+    { userId: user.id, isGuest: user.is_guest || false },
     process.env.JWT_SECRET,
     { expiresIn: '7d' }
   );
 
-  // Step 5: Update last login time
   await updateLastLogin(user.id);
 
-  // Step 6: Return what the controller needs
   return { userId: user.id, token };
 }
 
@@ -73,10 +69,12 @@ export async function guestLogin() {
   const user = await createUser(username, email, hashedPassword, true);
 
   const token = jwt.sign(
-    { userId: user.id },
+    { userId: user.id, isGuest: true },
     process.env.JWT_SECRET,
     { expiresIn: '7d' }
   );
+
+  await updateLastLogin(user.id);
 
   return { userId: user.id, token, username: user.username };
 }

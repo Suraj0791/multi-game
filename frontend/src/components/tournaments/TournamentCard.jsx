@@ -31,17 +31,6 @@ const STATUS_CONFIG = {
   },
 }
 
-function getJoinedCount(tournament) {
-  const value =
-    tournament.currentPlayers ??
-    tournament.playerCount ??
-    tournament.playersCount ??
-    tournament.joinedPlayers ??
-    tournament.joinedCount
-
-  return Number.isFinite(Number(value)) ? Number(value) : null
-}
-
 export default function TournamentCard({ tournament }) {
   const navigate = useNavigate()
   const game = GAME_CONFIG[tournament.gameType] || GAME_CONFIG.TRIVIA
@@ -50,7 +39,7 @@ export default function TournamentCard({ tournament }) {
     className: 'border-border bg-muted text-muted-foreground',
   }
   const GameIcon = game.icon
-  const joinedCount = getJoinedCount(tournament)
+  const joinedCount = tournament.playerCount ?? null
   const maxPlayers = Number(tournament.maxPlayers) || 0
   const shownPlayers = joinedCount ?? (tournament.status === 'REGISTRATION' ? 1 : null)
   const progress = maxPlayers && shownPlayers !== null ? Math.min((shownPlayers / maxPlayers) * 100, 100) : 0
@@ -81,7 +70,7 @@ export default function TournamentCard({ tournament }) {
           <User className="h-3.5 w-3.5 text-neutral-500" />
           <div className="flex items-center gap-1.5 truncate">
             <span className="truncate">Hosted by {tournament.hostName || 'Unknown'}</span>
-            {tournament.hostName?.startsWith('Player_') && (
+            {tournament.hostIsGuest && (
               <span className="rounded-sm bg-neutral-800 px-1 py-[1px] text-[9px] uppercase tracking-wide text-neutral-400">Guest</span>
             )}
           </div>

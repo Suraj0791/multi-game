@@ -108,8 +108,9 @@ export async function listPlayers(tournamentId) {
 
   return players.map(p => ({
     playerId: p.player_id,
-    username: p.username,         // from JOIN with users
-    eloRating: p.elo_rating,      // from JOIN with users
+    username: p.username,
+    eloRating: p.elo_rating,
+    isGuest: p.is_guest || false,
     joinedAt: p.joined_at,
     paymentStatus: p.payment_status,
   }));

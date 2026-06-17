@@ -2,11 +2,12 @@ import { useState } from 'react'
 import { Controller, useForm, useWatch } from 'react-hook-form'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
-import { Brain, Brush, IndianRupee, Loader2, Users } from 'lucide-react'
+import { AlertTriangle, Brain, Brush, IndianRupee, Loader2, Users } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { useCreateTournament } from '@/hooks/useTournaments'
+import useAuthStore from '@/stores/authStore'
 
 const GAMES = [
   {
@@ -30,6 +31,7 @@ const PLAYER_COUNTS = [2, 4, 8, 16]
 export default function CreateTournamentPage() {
   const navigate = useNavigate()
   const createMutation = useCreateTournament()
+  const isGuest = useAuthStore((state) => state.isGuest)
   const [feeMode, setFeeMode] = useState('free')
   const [error, setError] = useState(null)
 
@@ -166,6 +168,12 @@ export default function CreateTournamentPage() {
 
           <div className="space-y-3">
             <p className="text-sm font-medium text-neutral-200">Entry fee</p>
+            {isGuest && (
+              <div className="flex items-start gap-2 rounded-lg border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-sm text-amber-200">
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                <span>Guest accounts cannot create paid tournaments. Please register a real account.</span>
+              </div>
+            )}
             <div className="grid grid-cols-2 gap-2">
               <button
                 type="button"
@@ -180,11 +188,14 @@ export default function CreateTournamentPage() {
               </button>
               <button
                 type="button"
-                onClick={() => switchFeeMode('paid')}
+                onClick={() => !isGuest && switchFeeMode('paid')}
+                disabled={isGuest}
                 className={`rounded-lg border px-3 py-3 text-sm font-semibold transition-colors ${
-                  feeMode === 'paid'
-                    ? 'border-amber-500/35 bg-amber-500/10 text-amber-300'
-                    : 'border-border/70 bg-background/35 text-neutral-300 hover:bg-surface-hover'
+                  isGuest
+                    ? 'border-border/30 bg-background/20 text-neutral-500 cursor-not-allowed'
+                    : feeMode === 'paid'
+                      ? 'border-amber-500/35 bg-amber-500/10 text-amber-300'
+                      : 'border-border/70 bg-background/35 text-neutral-300 hover:bg-surface-hover'
                 }`}
               >
                 Paid
