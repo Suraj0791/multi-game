@@ -73,13 +73,17 @@ export async function cleanupExpiredGuests() {
     // Blocked users (both blocker and blocked)
     await query('DELETE FROM blocked_users WHERE blocker_id = ANY($1) OR blocked_user_id = ANY($1)', [guestIds]);
     
-    // Tournament registrations
+    // Tournament registrations (where the guest is a player)
     await query('DELETE FROM tournament_players WHERE player_id = ANY($1)', [guestIds]);
     
     // Matches where guest was player 1, player 2, or winner
     await query('DELETE FROM matches WHERE player_1_id = ANY($1) OR player_2_id = ANY($1) OR winner_id = ANY($1)', [guestIds]);
     
-    // Tournaments hosted by the guest
+    // CRITICAL FIX: If the guest HOSTED a tournament, we must delete all players and matches in that tournament BEFORE deleting the tournament
+    await query('DELETE FROM tournament_players WHERE tournament_id IN (SELECT id FROM tournaments WHERE host_id = ANY($1))', [guestIds]);
+    await query('DELETE FROM matches WHERE tournament_id IN (SELECT id FROM tournaments WHERE host_id = ANY($1))', [guestIds]);
+    
+    // NOW we can safely delete tournaments hosted by the guest
     await query('DELETE FROM tournaments WHERE host_id = ANY($1)', [guestIds]);
 
     // 3. Delete the users themselves

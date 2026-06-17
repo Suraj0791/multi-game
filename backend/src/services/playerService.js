@@ -2,40 +2,59 @@ import { addPlayer, findPlayer, getPlayersByTournament, removePlayer, countPlaye
 import { getTournamentById as fetchTournamentById } from '../models/Tournament.js';
 import { startTournament, getTournamentMatches } from './tournamentService.js';
 import { getIO } from '../socket/socketEvents.js';
+import { pool } from '../config/database.js';
 
 
 // JOIN a tournament
 // Business rules: tournament must exist, be in REGISTRATION, not full, player not already in
 export async function joinTournament(tournamentId, playerId) {
-  // Rule 1: Does the tournament exist?
-  const tournament = await fetchTournamentById(tournamentId);
-  if (!tournament) {
-    throw new Error('Tournament not found');
-  }
+  const client = await pool.connect();
+  let tournament;
 
-  // Rule 2: Is it still accepting players?
-  if (tournament.status !== 'REGISTRATION') {
-    throw new Error('Tournament is not accepting players');
-  }
+  try {
+    // Open a transaction
+    await client.query('BEGIN');
 
-  // Rule 3: Is the tournament full?
-  const playerCount = await countPlayers(tournamentId);
-  if (playerCount >= tournament.max_players) {
-    throw new Error('Tournament is full');
-  }
+    // Rule 1: Lock the tournament row to serialize concurrent join attempts (Race Condition Fix)
+    const tRes = await client.query('SELECT * FROM tournaments WHERE id = $1 FOR UPDATE', [tournamentId]);
+    if (tRes.rows.length === 0) {
+      throw new Error('Tournament not found');
+    }
+    tournament = tRes.rows[0];
 
-  // Rule 4: Has this player already joined?
-  const existing = await findPlayer(tournamentId, playerId);
-  if (existing) {
-    throw new Error('Already joined this tournament');
-  }
+    // Rule 2: Is it still accepting players?
+    if (tournament.status !== 'REGISTRATION') {
+      throw new Error('Tournament is not accepting players');
+    }
 
-  // All checks passed — add the player
-  const entry = await addPlayer(tournamentId, playerId);
+    // Rule 3: Is the tournament full? (Checking under the FOR UPDATE lock)
+    const pCountRes = await client.query('SELECT COUNT(*) as count FROM tournament_players WHERE tournament_id = $1', [tournamentId]);
+    const playerCount = parseInt(pCountRes.rows[0].count, 10);
+    if (playerCount >= tournament.max_players) {
+      throw new Error('Tournament is full');
+    }
 
-  // If the tournament is free, auto-complete the player's payment status
-  if (Number(tournament.entry_fee) === 0) {
-    await updatePlayerPaymentStatus(tournamentId, playerId, 'COMPLETED');
+    // Rule 4: Has this player already joined?
+    const existingRes = await client.query('SELECT * FROM tournament_players WHERE tournament_id = $1 AND player_id = $2', [tournamentId, playerId]);
+    if (existingRes.rows.length > 0) {
+      throw new Error('Already joined this tournament');
+    }
+
+    // All checks passed — insert the player
+    await client.query('INSERT INTO tournament_players (tournament_id, player_id) VALUES ($1, $2)', [tournamentId, playerId]);
+
+    // If the tournament is free, auto-complete the player's payment status
+    if (Number(tournament.entry_fee) === 0) {
+      await client.query('UPDATE tournament_players SET payment_status = $1 WHERE tournament_id = $2 AND player_id = $3', ['COMPLETED', tournamentId, playerId]);
+    }
+
+    // Commit the transaction, releasing the lock
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
   }
 
   // Emit tournament update socket event
@@ -71,7 +90,7 @@ export async function joinTournament(tournamentId, playerId) {
   }
 
   return {
-    tournamentId: entry.tournament_id,
+    tournamentId: tournament.id,
     joined: true,
     message: 'Successfully joined tournament',
   };

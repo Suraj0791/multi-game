@@ -4,6 +4,7 @@ import { createPaymentOrder, findByRazorpayOrderId, findSucceededPayment, markPa
 import { getTournamentById } from '../models/Tournament.js';
 import { updatePlayerPaymentStatus } from '../models/TournamentPlayer.js';
 import { getSocketIO } from './notificationService.js';
+import { pool } from '../config/database.js';
 
 // Lazy initialization — only creates Razorpay instance when actually needed
 // This prevents the app from crashing if keys aren't set (e.g., during tests)
@@ -66,8 +67,6 @@ export async function createOrder(userId, tournamentId) {
 export async function handleWebhook(rawBody, signature) {
 
   // 1. VERIFY — prove this request is actually from Razorpay, not a hacker
-  //    Razorpay signs the body with your webhook secret.
-  //    We recreate that signature. If they match → legit. If not → fraud.
   const expectedSignature = crypto
     .createHmac('sha256', process.env.RAZORPAY_WEBHOOK_SECRET)
     .update(rawBody)
@@ -80,34 +79,58 @@ export async function handleWebhook(rawBody, signature) {
   // 2. PARSE — the raw body is a string, parse it to read the event
   const event = JSON.parse(rawBody);
 
-  // 3. FILTER — Razorpay sends many event types (payment.failed, refund.created, etc.)
-  //    We only care about "payment.captured" (money successfully taken)
+  // 3. FILTER — We only care about "payment.captured"
   if (event.event !== 'payment.captured') {
-    return { received: true };  // acknowledge but do nothing
+    return { received: true }; 
   }
 
-  // 4. Extract the payment details from Razorpay's event structure
+  // 4. Extract the payment details
   const paymentEntity = event.payload.payment.entity;
   const razorpayOrderId = paymentEntity.order_id;
   const razorpayPaymentId = paymentEntity.id;
 
-  // 5. IDEMPOTENCY — has this payment already been processed?
-  //    Razorpay might call this webhook TWICE (network retry).
-  //    We check: is this order in our DB? Is it already SUCCEEDED?
-  const payment = await findByRazorpayOrderId(razorpayOrderId);
-  if (!payment) return { received: true };                    // unknown order, ignore
-  if (payment.status === 'SUCCESS') return { received: true };  // already done, skip
+  // 5. ATOMIC IDEMPOTENCY & DB PERSISTENCE
+  // Open a dedicated client connection for a transaction
+  const client = await pool.connect();
+  let tournamentId = null;
 
-  // 6. PERSIST — everything checks out, update the database
-  //    Mark payment as SUCCEEDED
-  await markPaymentSucceeded(razorpayOrderId, razorpayPaymentId);
-  //    Mark the player as officially paid in the tournament
-  await updatePlayerPaymentStatus(payment.tournament_id, payment.user_id, 'COMPLETED');
+  try {
+    await client.query('BEGIN');
 
-  // Emit tournament update socket event
+    // Lock the payment row to prevent concurrent webhook processing (Race Condition Fix)
+    const paymentRes = await client.query('SELECT * FROM payments WHERE razorpay_order_id = $1 FOR UPDATE', [razorpayOrderId]);
+    
+    if (paymentRes.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return { received: true }; // unknown order, ignore
+    }
+
+    const payment = paymentRes.rows[0];
+    tournamentId = payment.tournament_id;
+
+    if (payment.status === 'SUCCESS') {
+      await client.query('ROLLBACK');
+      return { received: true }; // already done by another concurrent request, safely skip
+    }
+
+    // Mark payment as SUCCEEDED
+    await client.query('UPDATE payments SET status = $1, razorpay_payment_id = $2 WHERE razorpay_order_id = $3', ['SUCCESS', razorpayPaymentId, razorpayOrderId]);
+    
+    // Mark the player as officially paid
+    await client.query('UPDATE tournament_players SET payment_status = $1 WHERE tournament_id = $2 AND player_id = $3', ['COMPLETED', payment.tournament_id, payment.user_id]);
+
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+
+  // Emit tournament update socket event (outside the transaction)
   const io = getSocketIO();
-  if (io) {
-    io.to(`tournament_${payment.tournament_id}`).emit("tournament:updated");
+  if (io && tournamentId) {
+    io.to(`tournament_${tournamentId}`).emit("tournament:updated");
   }
 
   return { received: true };
