@@ -3,7 +3,7 @@
 // ============================================================
 
 import { useEffect } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { useTournament } from '@/hooks/useTournaments'
 import { usePlayers, useJoinTournament, useLeaveTournament, useStartTournament, useBracket } from '@/hooks/usePlayers'
@@ -17,6 +17,9 @@ import PlayerList from '@/components/tournaments/PlayerList'
 import ActionButtons from '@/components/tournaments/ActionButtons'
 import BracketView from '@/components/bracket/BracketView'
 import ChatPanel from '@/components/chat/ChatPanel'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { CheckCircle2, Clock3, Copy, Swords, Users } from 'lucide-react'
 
 export default function TournamentDetailPage() {
   // Get the tournament ID from the URL (/tournaments/:id)
@@ -142,8 +145,8 @@ export default function TournamentDetailPage() {
         name: 'TourneyHub',
         description: `Entry Fee for ${tournament.name}`,
         order_id: orderData.orderId,
-        handler: async function (response) {
-          toast.success('Payment captured successfully!');
+        handler: async function () {
+          toast.success('Payment captured');
           // Invalidate queries so that players' status updates to COMPLETED in the UI
           queryClient.invalidateQueries({ queryKey: ['players', id] });
         },
@@ -156,7 +159,7 @@ export default function TournamentDetailPage() {
         },
         modal: {
           ondismiss: function () {
-            toast.error('Payment checkout cancelled');
+            toast.message('Payment cancelled');
           }
         }
       };
@@ -165,8 +168,13 @@ export default function TournamentDetailPage() {
       paymentObject.open();
     } catch (err) {
       console.error('Payment flow failed:', err);
-      toast.error(err.response?.data?.error || err.message || 'Payment failed to initiate');
+      toast.error(err.response?.data?.error || err.message || 'Could not start payment');
     }
+  };
+
+  const copyInvite = async () => {
+    await navigator.clipboard.writeText(window.location.href);
+    toast.success('Invite link copied');
   };
 
   // ============================================================
@@ -192,12 +200,9 @@ export default function TournamentDetailPage() {
   // RENDER — pass everything down to dumb children
   // ============================================================
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
+      <TournamentHeader tournament={tournament} playerCount={playersList.length} />
 
-      {/* Section A: Tournament info */}
-      <TournamentHeader tournament={tournament} />
-
-      {/* Section B: Action buttons — page passes computed booleans */}
       <ActionButtons
         canJoin={canJoin}
         canLeave={canLeave}
@@ -213,30 +218,92 @@ export default function TournamentDetailPage() {
         isStarting={startMutation.isPending}
       />
 
-      {/* Three-section layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left: Player list */}
-        <div className="lg:col-span-1 space-y-6">
-          <PlayerList players={players || []} maxPlayers={tournament.maxPlayers} />
-          {/* Chat below player list */}
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
+        <main className="min-w-0">
+          {showBracket && bracket ? (
+            <section className="rounded-xl border border-border/70 bg-surface/35 p-4">
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <div>
+                  <h2 className="text-base font-semibold text-neutral-100">Bracket</h2>
+                  <p className="text-sm text-muted-foreground">Matches update as players complete each round.</p>
+                </div>
+                <Badge variant="outline" className="border-blue-500/30 bg-blue-500/10 text-blue-300">
+                  Live
+                </Badge>
+              </div>
+              <BracketView
+                bracket={bracket}
+                tournamentId={id}
+                currentUserId={userId}
+                maxPlayers={tournament.maxPlayers}
+              />
+            </section>
+          ) : (
+            <section className="rounded-xl border border-border/70 bg-surface/35 p-5">
+              <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <h2 className="text-lg font-semibold text-neutral-100">Lobby</h2>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Invite players, complete payments, then start the bracket.
+                  </p>
+                </div>
+                <Button variant="outline" onClick={copyInvite} className="w-fit">
+                  <Copy className="h-4 w-4" />
+                  Copy Invite
+                </Button>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-3">
+                <div className="rounded-lg border border-border/60 bg-background/55 p-4">
+                  <Users className="mb-3 h-5 w-5 text-emerald-400" />
+                  <p className="text-sm text-muted-foreground">Players joined</p>
+                  <p className="mt-1 text-xl font-bold text-neutral-50">
+                    {playersList.length}/{tournament.maxPlayers}
+                  </p>
+                </div>
+                <div className="rounded-lg border border-border/60 bg-background/55 p-4">
+                  {hasUnpaidPlayers ? (
+                    <Clock3 className="mb-3 h-5 w-5 text-amber-400" />
+                  ) : (
+                    <CheckCircle2 className="mb-3 h-5 w-5 text-emerald-400" />
+                  )}
+                  <p className="text-sm text-muted-foreground">Payments</p>
+                  <p className="mt-1 text-xl font-bold text-neutral-50">
+                    {tournament.entryFee > 0 ? (hasUnpaidPlayers ? 'Pending' : 'Ready') : 'Free'}
+                  </p>
+                </div>
+                <div className="rounded-lg border border-border/60 bg-background/55 p-4">
+                  <Swords className="mb-3 h-5 w-5 text-amber-400" />
+                  <p className="text-sm text-muted-foreground">Start status</p>
+                  <p className="mt-1 text-xl font-bold text-neutral-50">
+                    {startDisabledReason || !isHost ? 'Waiting' : 'Ready'}
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-5 h-2 overflow-hidden rounded-full bg-muted">
+                <div
+                  className="h-full rounded-full bg-emerald-500"
+                  style={{ width: `${Math.min((playersList.length / tournament.maxPlayers) * 100, 100)}%` }}
+                />
+              </div>
+            </section>
+          )}
+        </main>
+
+        <aside className="space-y-5">
+          <PlayerList
+            players={players || []}
+            maxPlayers={tournament.maxPlayers}
+            hostId={tournament.hostId}
+            currentUserId={userId}
+          />
           <ChatPanel
             socket={socket}
             tournamentId={id}
             userId={userId}
           />
-        </div>
-
-        {/* Right: Bracket (only after tournament starts) */}
-        <div className="lg:col-span-2">
-          {showBracket && bracket && (
-            <BracketView
-              bracket={bracket}
-              tournamentId={id}
-              currentUserId={userId}
-              maxPlayers={tournament.maxPlayers}
-            />
-          )}
-        </div>
+        </aside>
       </div>
     </div>
   )

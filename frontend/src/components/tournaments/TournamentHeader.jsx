@@ -1,136 +1,84 @@
-// Tournament Header — shows tournament info at the top
-// DUMB: receives tournament object, displays it. No API, no state.
-
-import { useState } from 'react'
-import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Swords, User, IndianRupee, Users, Copy, Check } from 'lucide-react'
+import { Brain, Brush, IndianRupee, User, Users } from 'lucide-react'
 
-const STATUS_LABELS = {
-  REGISTRATION: 'Registration Open',
-  IN_PROGRESS: 'In Progress',
-  COMPLETED: 'Completed',
+const STATUS = {
+  REGISTRATION: {
+    label: 'Registration open',
+    className: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300',
+  },
+  IN_PROGRESS: {
+    label: 'Live',
+    className: 'border-blue-500/30 bg-blue-500/10 text-blue-300',
+  },
+  COMPLETED: {
+    label: 'Completed',
+    className: 'border-neutral-600 bg-neutral-800/70 text-neutral-300',
+  },
 }
 
-const STATUS_COLORS = {
-  REGISTRATION: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400',
-  IN_PROGRESS: 'border-amber-500/30 bg-amber-500/10 text-amber-400 animate-pulse',
-  COMPLETED: 'border-blue-500/30 bg-blue-500/10 text-blue-400',
+const GAME = {
+  TRIVIA: { label: 'Trivia', icon: Brain, className: 'text-emerald-300' },
+  QUICK_DRAW: { label: 'QuickDraw', icon: Brush, className: 'text-amber-300' },
 }
 
-export default function TournamentHeader({ tournament }) {
-  const [copied, setCopied] = useState(false)
-
-  const handleCopyLink = async () => {
-    try {
-      await navigator.clipboard.writeText(window.location.href)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-    } catch (err) {
-      console.error('Failed to copy text: ', err)
-    }
+export default function TournamentHeader({ tournament, playerCount = 0 }) {
+  const status = STATUS[tournament.status] || {
+    label: tournament.status,
+    className: 'border-border bg-muted text-muted-foreground',
   }
-
-  const inviteLink = typeof window !== 'undefined' ? window.location.href : ''
+  const game = GAME[tournament.gameType] || GAME.TRIVIA
+  const GameIcon = game.icon
+  const entryFee = Number(tournament.entryFee) > 0 ? `₹${tournament.entryFee}` : 'Free'
 
   return (
-    <div className="relative overflow-hidden rounded-xl border border-neutral-800 bg-gradient-to-br from-neutral-900 via-neutral-950 to-amber-950/10 p-6 md:p-8 shadow-[0_4px_20px_rgba(0,0,0,0.4)]">
-      {/* Absolute Decorative Glow */}
-      <div className="absolute right-0 top-0 -z-10 h-32 w-32 rounded-full bg-amber-500/5 blur-3xl" />
-      
-      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        <div className="space-y-1">
-          <div className="flex items-center gap-3 flex-wrap">
-            <Badge variant="outline" className={`px-2.5 py-0.5 text-xs font-semibold ${STATUS_COLORS[tournament.status] || 'border-neutral-700 bg-neutral-800 text-neutral-300'}`}>
-              {STATUS_LABELS[tournament.status] || tournament.status}
+    <section className="rounded-xl border border-border/70 bg-surface/40 p-5">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div className="min-w-0">
+          <div className="mb-3 flex flex-wrap items-center gap-2">
+            <Badge variant="outline" className={status.className}>
+              {status.label}
             </Badge>
-            <span className="text-xs text-neutral-500 font-medium">Created {new Date(tournament.createdAt).toLocaleDateString()}</span>
+            <Badge variant="outline" className="border-border/80 bg-background/60 text-neutral-300">
+              <GameIcon className={`h-3 w-3 ${game.className}`} />
+              {game.label}
+            </Badge>
           </div>
-          <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight bg-gradient-to-r from-white via-neutral-200 to-amber-400 bg-clip-text text-transparent">
+          <h1 className="text-2xl font-bold leading-tight tracking-tight text-neutral-50 md:text-3xl">
             {tournament.name}
           </h1>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Created {tournament.createdAt ? new Date(tournament.createdAt).toLocaleDateString() : 'recently'}
+          </p>
         </div>
 
-        {tournament.status === 'REGISTRATION' && (
-          <div className="flex items-center gap-2 bg-neutral-900/80 border border-neutral-800 rounded-lg p-2 max-w-full md:max-w-md w-full md:w-auto">
-            <input
-              type="text"
-              readOnly
-              value={inviteLink}
-              className="bg-transparent text-xs text-neutral-400 outline-none px-2 select-all w-full truncate md:w-60"
-            />
-            <Button
-              onClick={handleCopyLink}
-              size="sm"
-              className="bg-amber-500 hover:bg-amber-600 text-neutral-950 font-bold shrink-0 flex items-center gap-1.5"
-            >
-              {copied ? (
-                <>
-                  <Check className="h-4 w-4" />
-                  <span>Copied</span>
-                </>
-              ) : (
-                <>
-                  <Copy className="h-4 w-4" />
-                  <span>Copy Invite Link</span>
-                </>
-              )}
-            </Button>
+        <div className="grid gap-2 sm:grid-cols-3 lg:min-w-[460px]">
+          <div className="rounded-lg border border-border/60 bg-background/50 px-3 py-2">
+            <div className="mb-1 flex items-center gap-1.5 text-xs text-muted-foreground">
+              <User className="h-3.5 w-3.5" />
+              Host
+            </div>
+            <p className="truncate text-sm font-medium text-neutral-100">{tournament.hostName}</p>
           </div>
-        )}
-      </div>
-
-      {/* Grid of info boxes */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6">
-        <div className="flex items-center gap-3 p-3 rounded-lg bg-neutral-900/60 border border-neutral-800/80">
-          <div className="p-2 rounded-md bg-amber-500/10 text-amber-400">
-            <Swords className="h-5 w-5" />
-          </div>
-          <div>
-            <p className="text-xs text-neutral-500 uppercase tracking-wider font-semibold">Game Type</p>
-            <p className="text-sm font-medium text-neutral-200">
-              {tournament.gameType === 'TRIVIA' ? 'Trivia Showdown' : 'Quick Draw'}
+          <div className="rounded-lg border border-border/60 bg-background/50 px-3 py-2">
+            <div className="mb-1 flex items-center gap-1.5 text-xs text-muted-foreground">
+              <Users className="h-3.5 w-3.5" />
+              Players
+            </div>
+            <p className="text-sm font-medium text-neutral-100">
+              {playerCount}/{tournament.maxPlayers}
             </p>
           </div>
-        </div>
-
-        <div className="flex items-center gap-3 p-3 rounded-lg bg-neutral-900/60 border border-neutral-800/80">
-          <div className="p-2 rounded-md bg-amber-500/10 text-amber-400">
-            <User className="h-5 w-5" />
-          </div>
-          <div>
-            <p className="text-xs text-neutral-500 uppercase tracking-wider font-semibold">Host</p>
-            <p className="text-sm font-medium text-neutral-200 truncate max-w-[120px]" title={tournament.hostName}>
-              {tournament.hostName}
-            </p>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-3 p-3 rounded-lg bg-neutral-900/60 border border-neutral-800/80">
-          <div className="p-2 rounded-md bg-amber-500/10 text-amber-400">
-            <IndianRupee className="h-5 w-5" />
-          </div>
-          <div>
-            <p className="text-xs text-neutral-500 uppercase tracking-wider font-semibold">Entry Fee</p>
-            <p className="text-sm font-bold text-amber-400">
-              {tournament.entryFee > 0 ? `₹${tournament.entryFee}` : 'Free Entry'}
-            </p>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-3 p-3 rounded-lg bg-neutral-900/60 border border-neutral-800/80">
-          <div className="p-2 rounded-md bg-amber-500/10 text-amber-400">
-            <Users className="h-5 w-5" />
-          </div>
-          <div>
-            <p className="text-xs text-neutral-500 uppercase tracking-wider font-semibold">Capacity</p>
-            <p className="text-sm font-medium text-neutral-200">
-              Max {tournament.maxPlayers} Players
+          <div className="rounded-lg border border-border/60 bg-background/50 px-3 py-2">
+            <div className="mb-1 flex items-center gap-1.5 text-xs text-muted-foreground">
+              <IndianRupee className="h-3.5 w-3.5" />
+              Entry
+            </div>
+            <p className={Number(tournament.entryFee) > 0 ? 'text-sm font-medium text-amber-300' : 'text-sm font-medium text-emerald-300'}>
+              {entryFee}
             </p>
           </div>
         </div>
       </div>
-    </div>
+    </section>
   )
 }
-

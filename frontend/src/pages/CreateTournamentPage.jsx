@@ -1,123 +1,247 @@
-
-
 import { useState } from 'react'
-import { useForm } from 'react-hook-form'
+import { Controller, useForm, useWatch } from 'react-hook-form'
 import { useNavigate } from 'react-router-dom'
+import { toast } from 'sonner'
+import { Brain, Brush, IndianRupee, Loader2, Users } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
 import { useCreateTournament } from '@/hooks/useTournaments'
+
+const GAMES = [
+  {
+    value: 'TRIVIA',
+    label: 'Trivia',
+    text: 'Fast questions, timed answers, live scoring.',
+    icon: Brain,
+    className: 'border-emerald-500/25 text-emerald-300',
+  },
+  {
+    value: 'QUICK_DRAW',
+    label: 'QuickDraw',
+    text: 'One player draws, the other guesses live.',
+    icon: Brush,
+    className: 'border-amber-500/25 text-amber-300',
+  },
+]
+
+const PLAYER_COUNTS = [2, 4, 8, 16]
 
 export default function CreateTournamentPage() {
   const navigate = useNavigate()
-
   const createMutation = useCreateTournament()
+  const [feeMode, setFeeMode] = useState('free')
+  const [error, setError] = useState(null)
 
   const {
+    control,
     register,
     handleSubmit,
-    formState: { isSubmitting }
+    setValue,
+    formState: { isSubmitting },
   } = useForm({
-    // Default values — pre-fill the form
     defaultValues: {
       name: '',
       game_type: 'TRIVIA',
       max_players: 8,
       entry_fee: 0,
-    }
+    },
   })
 
-  const [error, setError] = useState(null)
+  const values = useWatch({ control })
+  const selectedGame = GAMES.find((game) => game.value === values.game_type) || GAMES[0]
+  const PreviewGameIcon = selectedGame.icon
+  const isCreating = isSubmitting || createMutation.isPending
 
   const onSubmit = async (data) => {
     setError(null)
-    try {
 
+    try {
       const response = await createMutation.mutateAsync({
         name: data.name,
         game_type: data.game_type,
-        max_players: Number(data.max_players),   // form gives strings, backend wants numbers
-        entry_fee: Number(data.entry_fee),
+        max_players: Number(data.max_players),
+        entry_fee: feeMode === 'free' ? 0 : Number(data.entry_fee || 0),
       })
 
+      toast.success('Tournament ready')
       navigate(`/tournaments/${response.tournamentId}`, { replace: true })
     } catch (err) {
-      setError(err.response?.data?.error || err.message || 'Failed to create tournament.')
+      const message = err.response?.data?.error || err.message || 'Could not create tournament'
+      setError(message)
+      toast.error(message)
     }
   }
 
-  return (
-    <div className="max-w-lg mx-auto">
-      <Card>
-        <CardHeader>
-          <CardTitle>Create Tournament</CardTitle>
-          <CardDescription>Set up a new tournament for players to join</CardDescription>
-        </CardHeader>
+  const switchFeeMode = (mode) => {
+    setFeeMode(mode)
+    if (mode === 'free') setValue('entry_fee', 0)
+  }
 
-        <CardContent>
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-            {error && (
-              <div className="bg-danger/10 text-danger text-sm p-3 rounded-md">
-                {error}
+  return (
+    <div className="mx-auto grid max-w-5xl gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
+      <section className="rounded-xl border border-border/70 bg-surface/35 p-5">
+        <div className="mb-6">
+          <h1 className="text-2xl font-bold tracking-tight text-neutral-50">Create Tournament</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Set up the lobby, invite players, and start when everyone is ready.
+          </p>
+        </div>
+
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+          {error && (
+            <div className="rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-sm text-red-200">
+              {error}
+            </div>
+          )}
+
+          <div className="space-y-2">
+            <label htmlFor="name" className="text-sm font-medium text-neutral-200">
+              Tournament name
+            </label>
+            <Input
+              id="name"
+              placeholder="Friday Night Finals"
+              className="h-10 border-border/80 bg-background/60"
+              {...register('name', { required: true })}
+            />
+          </div>
+
+          <Controller
+            control={control}
+            name="game_type"
+            render={({ field }) => (
+              <div className="space-y-3">
+                <p className="text-sm font-medium text-neutral-200">Game type</p>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {GAMES.map((game) => {
+                    const Icon = game.icon
+                    const active = field.value === game.value
+
+                    return (
+                      <button
+                        key={game.value}
+                        type="button"
+                        onClick={() => field.onChange(game.value)}
+                        className={`rounded-xl border p-4 text-left transition-all hover:bg-surface-hover ${
+                          active ? `${game.className} bg-background/70` : 'border-border/70 bg-background/35 text-neutral-300'
+                        }`}
+                      >
+                        <Icon className="mb-4 h-5 w-5" />
+                        <h2 className="font-semibold text-neutral-50">{game.label}</h2>
+                        <p className="mt-1 text-sm leading-6 text-muted-foreground">{game.text}</p>
+                      </button>
+                    )
+                  })}
+                </div>
               </div>
             )}
+          />
 
-            {/* Tournament Name */}
-            <div className="space-y-2">
-              <label htmlFor="name" className="text-sm font-medium">Tournament Name</label>
-              <Input
-                id="name"
-                placeholder="e.g. Friday Night Trivia"
-                {...register('name', { required: true })}
-              />
-            </div>
+          <Controller
+            control={control}
+            name="max_players"
+            render={({ field }) => (
+              <div className="space-y-3">
+                <p className="text-sm font-medium text-neutral-200">Players</p>
+                <div className="grid grid-cols-4 gap-2">
+                  {PLAYER_COUNTS.map((count) => (
+                    <button
+                      key={count}
+                      type="button"
+                      onClick={() => field.onChange(count)}
+                      className={`rounded-lg border px-3 py-3 text-sm font-semibold transition-colors ${
+                        Number(field.value) === count
+                          ? 'border-amber-500/35 bg-amber-500/10 text-amber-300'
+                          : 'border-border/70 bg-background/35 text-neutral-300 hover:bg-surface-hover'
+                      }`}
+                    >
+                      {count}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          />
 
-            {/* Game Type — dropdown */}
-            <div className="space-y-2">
-              <label htmlFor="game_type" className="text-sm font-medium">Game Type</label>
-              <select
-                id="game_type"
-                {...register('game_type')}
-                className="w-full h-9 rounded-md border border-border bg-background px-3 text-sm text-foreground"
+          <div className="space-y-3">
+            <p className="text-sm font-medium text-neutral-200">Entry fee</p>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => switchFeeMode('free')}
+                className={`rounded-lg border px-3 py-3 text-sm font-semibold transition-colors ${
+                  feeMode === 'free'
+                    ? 'border-emerald-500/35 bg-emerald-500/10 text-emerald-300'
+                    : 'border-border/70 bg-background/35 text-neutral-300 hover:bg-surface-hover'
+                }`}
               >
-                <option value="TRIVIA">Trivia</option>
-                <option value="QUICK_DRAW">Quick Draw</option>
-              </select>
-            </div>
-
-            {/* Max Players — dropdown */}
-            <div className="space-y-2">
-              <label htmlFor="max_players" className="text-sm font-medium">Max Players</label>
-              <select
-                id="max_players"
-                {...register('max_players')}
-                className="w-full h-9 rounded-md border border-border bg-background px-3 text-sm text-foreground"
+                Free
+              </button>
+              <button
+                type="button"
+                onClick={() => switchFeeMode('paid')}
+                className={`rounded-lg border px-3 py-3 text-sm font-semibold transition-colors ${
+                  feeMode === 'paid'
+                    ? 'border-amber-500/35 bg-amber-500/10 text-amber-300'
+                    : 'border-border/70 bg-background/35 text-neutral-300 hover:bg-surface-hover'
+                }`}
               >
-                <option value="2">2 Players</option>
-                <option value="4">4 Players</option>
-                <option value="8">8 Players</option>
-                <option value="16">16 Players</option>
-              </select>
+                Paid
+              </button>
             </div>
+            {feeMode === 'paid' && (
+              <div className="relative">
+                <IndianRupee className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  type="number"
+                  min="1"
+                  placeholder="Entry amount"
+                  className="h-10 border-border/80 bg-background/60 pl-9"
+                  {...register('entry_fee')}
+                />
+              </div>
+            )}
+          </div>
 
-            {/* Entry Fee */}
-            <div className="space-y-2">
-              <label htmlFor="entry_fee" className="text-sm font-medium">Entry Fee (₹)</label>
-              <Input
-                id="entry_fee"
-                type="number"
-                min="0"
-                placeholder="0 for free"
-                {...register('entry_fee')}
-              />
+          <Button type="submit" className="h-10 w-full" disabled={isCreating}>
+            {isCreating && <Loader2 className="h-4 w-4 animate-spin" />}
+            {isCreating ? 'Creating tournament' : 'Create Tournament'}
+          </Button>
+        </form>
+      </section>
+
+      <aside className="rounded-xl border border-border/70 bg-surface/35 p-5 lg:sticky lg:top-20 lg:h-fit">
+        <p className="mb-4 text-sm font-medium text-muted-foreground">Preview</p>
+        <div className="rounded-xl border border-border/70 bg-background/55 p-4">
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <Badge variant="outline" className={selectedGame.className}>
+              <PreviewGameIcon className="h-3 w-3" />
+              {selectedGame.label}
+            </Badge>
+            <Badge variant="outline" className="border-emerald-500/30 bg-emerald-500/10 text-emerald-300">
+              Open
+            </Badge>
+          </div>
+          <h2 className="line-clamp-2 text-lg font-semibold text-neutral-50">
+            {values.name || 'Untitled tournament'}
+          </h2>
+          <div className="mt-4 grid grid-cols-2 gap-2 text-sm">
+            <div className="rounded-lg border border-border/60 bg-surface/50 p-3">
+              <Users className="mb-2 h-4 w-4 text-emerald-400" />
+              <p className="text-muted-foreground">Players</p>
+              <p className="font-medium text-neutral-100">1 / {values.max_players}</p>
             </div>
-
-            <Button type="submit" className="w-full" disabled={isSubmitting}>
-              {isSubmitting ? 'Creating...' : 'Create Tournament'}
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
+            <div className="rounded-lg border border-border/60 bg-surface/50 p-3">
+              <IndianRupee className="mb-2 h-4 w-4 text-amber-400" />
+              <p className="text-muted-foreground">Entry</p>
+              <p className={feeMode === 'free' ? 'font-medium text-emerald-300' : 'font-medium text-amber-300'}>
+                {feeMode === 'free' ? 'Free' : `₹${values.entry_fee || 0}`}
+              </p>
+            </div>
+          </div>
+        </div>
+      </aside>
     </div>
   )
 }
