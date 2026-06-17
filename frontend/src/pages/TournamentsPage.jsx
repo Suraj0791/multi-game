@@ -124,7 +124,7 @@ export default function TournamentsPage() {
                 variant={statusFilter === status.value ? 'secondary' : 'ghost'}
                 size="sm"
                 onClick={() => setStatusFilter(status.value)}
-                className="shrink-0"
+                className={`shrink-0 ${statusFilter === status.value ? 'bg-amber-500/20 text-amber-300 hover:bg-amber-500/30' : ''}`}
               >
                 {status.label}
               </Button>

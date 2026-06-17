@@ -29,6 +29,8 @@ export async function completeMatch(req, res) {
   }
 }
 
+import jwt from 'jsonwebtoken';
+
 // Handle POST /matches/quick — public quick match (no auth needed)
 // Creates a 2-player room. Player 1 gets the link, shares it with Player 2.
 // Both join via the normal tournament flow — no bots involved.
@@ -39,21 +41,39 @@ export async function createQuickMatch(req, res) {
       return res.status(400).json({ error: 'gameType must be TRIVIA or QUICK_DRAW' });
     }
 
-    // Create a temp guest user + JWT
-    const guest = await guestLoginService();
+    let hostId;
+    let token = null;
+
+    // Check if the user is already logged in
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const userToken = authHeader.split(' ')[1];
+      try {
+        const decoded = jwt.verify(userToken, process.env.JWT_SECRET);
+        hostId = decoded.userId;
+      } catch (err) {
+        // Invalid token, fallback to creating a guest
+      }
+    }
+
+    // If not logged in or invalid token, create a temp guest user
+    if (!hostId) {
+      const guest = await guestLoginService();
+      hostId = guest.userId;
+      token = guest.token;
+    }
 
     // Create a 2-player tournament — host (Player 1) is auto-added by createTournament
-    // Player 2 joins later via the invite link
     const tournament = await createTournament(
       `Quick ${gameType === 'TRIVIA' ? 'Trivia' : 'Quick Draw'}`,
-      gameType, 2, 0, guest.userId
+      gameType, 2, 0, hostId
     );
 
     res.status(201).json({
       tournamentId: tournament.tournamentId,
       gameType,
-      token: guest.token,
-      userId: guest.userId,
+      token, // undefined/null if they used their own token
+      userId: hostId,
       message: 'Share the tournament link with Player 2 to join',
     });
   } catch (error) {

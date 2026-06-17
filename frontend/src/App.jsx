@@ -56,11 +56,7 @@ function App() {
                 <LoginPage />
               </PublicRoute>
             } />
-            <Route path="/register" element={
-              <PublicRoute>
-                <RegisterPage />
-              </PublicRoute>
-            } />
+            <Route path="/register" element={<RegisterPage />} />
 
             {/* Leaderboard is public so anyone can see top players */}
             <Route path="/leaderboard" element={

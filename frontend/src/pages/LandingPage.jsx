@@ -68,7 +68,9 @@ export default function LandingPage() {
     setLoading(gameType)
     try {
       const data = await createQuickMatch(gameType)
-      login(data.token, data.userId)
+      if (data.token) {
+        login(data.token, data.userId)
+      }
       navigate(`/tournaments/${data.tournamentId}/match/waiting`, { replace: true })
     } catch {
       setLoading(null)

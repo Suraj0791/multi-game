@@ -25,7 +25,7 @@ export async function authenticate(req, res, next) {
     }
 
     // Step 3: Attach user data to request — now every controller can use req.user
-    req.user = { userId: decoded.userId };
+    req.user = { userId: decoded.userId, isGuest: user.is_guest };
 
     // Step 4: Pass to next handler (the controller)
     next();

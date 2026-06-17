@@ -6,6 +6,7 @@
 
 import { useEffect, useState } from 'react'
 import { io } from 'socket.io-client'
+import useAuthStore from '@/stores/authStore'
 
 const SOCKET_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000'
 
@@ -13,6 +14,8 @@ const SOCKET_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000'
 let globalSocket = null;
 
 export default function useSocket() {
+  const token = useAuthStore((state) => state.token);
+
   const [socket] = useState(() => {
     if (!globalSocket) {
       globalSocket = io(SOCKET_URL, {
@@ -23,14 +26,6 @@ export default function useSocket() {
         auth: {
           token: localStorage.getItem('token'),
         },
-      });
-
-      // Re-attach token on reconnect (in case user logged in after first connect)
-      globalSocket.on('connect', () => {
-        const currentToken = localStorage.getItem('token');
-        if (currentToken && globalSocket.auth) {
-          globalSocket.auth.token = currentToken;
-        }
       });
 
       // Socket event tracing for E2E tests — logs to window.__socketEvents
@@ -70,6 +65,15 @@ export default function useSocket() {
     }
     return globalSocket;
   });
+
+  // Re-authenticate when token changes
+  useEffect(() => {
+    if (globalSocket && token && globalSocket.auth.token !== token) {
+      globalSocket.auth.token = token;
+      globalSocket.disconnect();
+      globalSocket.connect();
+    }
+  }, [token]);
 
   // Ensure socket is connected (handles React StrictMode's unmount→remount cycle).
   useEffect(() => {

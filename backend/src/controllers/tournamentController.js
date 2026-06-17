@@ -10,6 +10,11 @@ export async function create(req, res) {
     // host_id comes from JWT (middleware set req.user), NOT from req.body
     // Why? Users shouldn't be able to create tournaments as someone else!
     const host_id = req.user.userId;
+    const isGuest = req.user.isGuest;
+
+    if (isGuest && Number(entry_fee) > 0) {
+      return res.status(403).json({ error: "Guest accounts cannot create paid tournaments. Please register a free account." });
+    }
 
     // Service handles validation + DB insert + formatting
     const result = await createTournament(name, game_type, max_players, entry_fee, host_id);

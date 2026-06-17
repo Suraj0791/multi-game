@@ -6,6 +6,11 @@ export async function createOrder(req, res) {
   try {
     const tournamentId = req.params.id;
     const userId = req.user.userId;
+    const isGuest = req.user.isGuest;
+
+    if (isGuest) {
+      return res.status(403).json({ error: "Guest accounts cannot participate in paid tournaments. Please register a free account." });
+    }
 
     // Service handles all guards (tournament exists, has fee, not already paid)
     const result = await createPaymentOrder(userId, tournamentId);

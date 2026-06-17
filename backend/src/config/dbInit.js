@@ -30,6 +30,25 @@ export async function runMigrations() {
   }
 }
 
+export async function initializeDatabase() {
+  console.log('🔄 Checking database connections and schemas...');
+  try {
+    // Basic connectivity check
+    await query('SELECT NOW()');
+    
+    // Ensure that columns involved in Cascade Deletion fixes are nullable
+    await query('ALTER TABLE tournaments ALTER COLUMN host_id DROP NOT NULL').catch(() => {});
+    await query('ALTER TABLE matches ALTER COLUMN player_1_id DROP NOT NULL').catch(() => {});
+    await query('ALTER TABLE matches ALTER COLUMN player_2_id DROP NOT NULL').catch(() => {});
+    await query('ALTER TABLE matches ALTER COLUMN winner_id DROP NOT NULL').catch(() => {});
+
+    console.log('✅ Database connected and verified.');
+  } catch (error) {
+    console.error('❌ Database initialization failed:', error);
+    process.exit(1);
+  }
+}
+
 /**
  * Deletes guest users and all their dependencies if their last login was more than 24 hours ago.
  */
@@ -77,14 +96,13 @@ export async function cleanupExpiredGuests() {
     await query('DELETE FROM tournament_players WHERE player_id = ANY($1)', [guestIds]);
     
     // Matches where guest was player 1, player 2, or winner
-    await query('DELETE FROM matches WHERE player_1_id = ANY($1) OR player_2_id = ANY($1) OR winner_id = ANY($1)', [guestIds]);
+    await query('UPDATE matches SET player_1_id = NULL WHERE player_1_id = ANY($1)', [guestIds]);
+    await query('UPDATE matches SET player_2_id = NULL WHERE player_2_id = ANY($1)', [guestIds]);
+    await query('UPDATE matches SET winner_id = NULL WHERE winner_id = ANY($1)', [guestIds]);
     
-    // CRITICAL FIX: If the guest HOSTED a tournament, we must delete all players and matches in that tournament BEFORE deleting the tournament
-    await query('DELETE FROM tournament_players WHERE tournament_id IN (SELECT id FROM tournaments WHERE host_id = ANY($1))', [guestIds]);
-    await query('DELETE FROM matches WHERE tournament_id IN (SELECT id FROM tournaments WHERE host_id = ANY($1))', [guestIds]);
-    
-    // NOW we can safely delete tournaments hosted by the guest
-    await query('DELETE FROM tournaments WHERE host_id = ANY($1)', [guestIds]);
+    // CRITICAL FIX: Instead of deleting tournaments hosted by guests, we ORPHAN them so real users don't lose their data!
+    // This requires tournaments.host_id to be nullable. (If it's not, we should alter it during startup).
+    await query('UPDATE tournaments SET host_id = NULL WHERE host_id = ANY($1)', [guestIds]);
 
     // 3. Delete the users themselves
     const deleteUsersRes = await query('DELETE FROM users WHERE id = ANY($1)', [guestIds]);

@@ -1,10 +1,23 @@
 import { joinTournament, listPlayers, leaveTournament } from '../services/playerService.js';
+import { getTournamentById } from '../services/tournamentService.js';
 
 // POST /tournaments/:id/join — join a tournament
 export async function join(req, res) {
   try {
+    const tournamentId = req.params.id;
+    const userId = req.user.userId;
+    const isGuest = req.user.isGuest;
+
+    if (isGuest) {
+      // Check if it's a paid tournament
+      const tournament = await getTournamentById(tournamentId);
+      if (tournament && Number(tournament.entryFee) > 0) {
+        return res.status(403).json({ error: "Guest accounts cannot join paid tournaments. Please register a free account." });
+      }
+    }
+
     // tournament ID from URL params, player ID from JWT
-    const result = await joinTournament(req.params.id, req.user.userId);
+    const result = await joinTournament(tournamentId, userId);
     res.status(201).json(result);
   } catch (error) {
     const status = error.message.includes('not found') ? 404 : 400;

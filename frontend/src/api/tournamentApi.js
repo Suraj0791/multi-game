@@ -85,9 +85,13 @@ export async function createVsBotMatch(gameType) {
 
 // POST /matches/quick → public quick match (no login required)
 export async function createQuickMatch(gameType) {
+  const token = localStorage.getItem('token');
+  const headers = { 'Content-Type': 'application/json' };
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+
   const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3000'}/matches/quick`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     body: JSON.stringify({ gameType }),
   });
   if (!response.ok) throw new Error('Quick match failed');

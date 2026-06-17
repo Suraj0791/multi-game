@@ -1,12 +1,37 @@
 import { create } from 'zustand'
 
+const parseJwt = (token) => {
+  try {
+    return JSON.parse(atob(token.split('.')[1]));
+  } catch (e) {
+    return null;
+  }
+};
+
+const getValidAuth = () => {
+  const token = localStorage.getItem('token');
+  const userId = localStorage.getItem('userId');
+  if (!token || !userId || userId === 'null' || userId === 'undefined') {
+    return { token: null, userId: null };
+  }
+  
+  const decoded = parseJwt(token);
+  // If token is expired or invalid, purge it immediately
+  if (!decoded || !decoded.exp || decoded.exp * 1000 < Date.now()) {
+    localStorage.removeItem('token');
+    localStorage.removeItem('userId');
+    return { token: null, userId: null };
+  }
+  
+  return { token, userId };
+};
+
+const initialAuth = getValidAuth();
+
 const useAuthStore = create((set) => ({
-  // STATE — the data we store
-  token: localStorage.getItem('token') || null,
-  userId: (() => {
-    const stored = localStorage.getItem('userId');
-    return (stored && stored !== 'null' && stored !== 'undefined') ? stored : null;
-  })(),
+  // STATE — the data we store (validated on boot)
+  token: initialAuth.token,
+  userId: initialAuth.userId,
 
   // DERIVED — computed from state (not stored separately)
   // We don't store isLoggedIn — we derive it from token !== null
