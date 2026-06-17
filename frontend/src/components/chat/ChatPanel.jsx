@@ -131,7 +131,14 @@ export default function ChatPanel({ socket, tournamentId, userId }) {
               <div key={msg.id} className={`flex ${isMe ? "justify-end" : "justify-start"}`}>
                 <div className={`max-w-[86%] ${isMe ? "items-end" : "items-start"} flex flex-col gap-1`}>
                   <div className="flex items-center gap-1.5 px-1 text-[11px] text-muted-foreground">
-                    {!isMe && <span className="font-medium text-neutral-300">{msg.username || "Player"}</span>}
+                    {!isMe && (
+                      <span className="font-medium text-neutral-300 flex items-center gap-1">
+                        {msg.username || "Player"}
+                        {msg.username?.startsWith("Player_") && (
+                          <span className="rounded-sm bg-neutral-800 px-1 text-[9px] uppercase tracking-wide text-neutral-400">Guest</span>
+                        )}
+                      </span>
+                    )}
                     {isMe && <span className="font-medium text-neutral-300">You</span>}
                     {formattedTime && <span>{formattedTime}</span>}
                   </div>

@@ -79,7 +79,12 @@ export default function TournamentCard({ tournament }) {
       <div className="space-y-3 text-sm text-muted-foreground">
         <div className="flex items-center gap-2">
           <User className="h-3.5 w-3.5 text-neutral-500" />
-          <span className="truncate">Hosted by {tournament.hostName || 'Unknown'}</span>
+          <div className="flex items-center gap-1.5 truncate">
+            <span className="truncate">Hosted by {tournament.hostName || 'Unknown'}</span>
+            {tournament.hostName?.startsWith('Player_') && (
+              <span className="rounded-sm bg-neutral-800 px-1 py-[1px] text-[9px] uppercase tracking-wide text-neutral-400">Guest</span>
+            )}
+          </div>
         </div>
 
         <div className="grid grid-cols-2 gap-2">

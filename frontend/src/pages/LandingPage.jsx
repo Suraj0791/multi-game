@@ -7,6 +7,7 @@ import {
   Brush,
   Check,
   Copy,
+  IndianRupee,
   ShieldCheck,
   Swords,
   Trophy,
@@ -258,6 +259,58 @@ export default function LandingPage() {
                 </div>
               )
             })}
+          </div>
+        </section>
+
+        {/* ====== FAQ SECTION ====== */}
+        <section className="border-t border-border/70 bg-background py-16">
+          <div className="mx-auto max-w-4xl px-4">
+            <div className="mb-10 text-center">
+              <h2 className="text-3xl font-bold tracking-tight text-neutral-50">Frequently Asked Questions</h2>
+              <p className="mt-2 text-muted-foreground">Everything you need to know about testing the platform.</p>
+            </div>
+            
+            <div className="space-y-4">
+              <div className="rounded-xl border border-border/60 bg-surface/35 p-5 transition-colors hover:bg-surface/50">
+                <h3 className="font-semibold text-neutral-100 flex items-center gap-2">
+                  <Users className="h-4 w-4 text-amber-400" />
+                  What is the difference between Guest and Real accounts?
+                </h3>
+                <p className="mt-2 text-sm text-neutral-400 leading-relaxed">
+                  Guests are ephemeral demo accounts designed for immediate, frictionless testing. They are automatically deleted by a server CRON job after 24 hours. Real accounts are permanent, allowing you to save your ELO rating, host public matches, and securely manage your wallet.
+                </p>
+              </div>
+
+              <div className="rounded-xl border border-border/60 bg-surface/35 p-5 transition-colors hover:bg-surface/50">
+                <h3 className="font-semibold text-neutral-100 flex items-center gap-2">
+                  <IndianRupee className="h-4 w-4 text-emerald-400" />
+                  Can Guests participate in paid tournaments?
+                </h3>
+                <p className="mt-2 text-sm text-neutral-400 leading-relaxed">
+                  No. To protect against financial data loss and chargeback risks when the 24-hour CRON job cleans the database, Guests are programmatically blocked by the backend API from creating or joining paid tournaments. You must register a free permanent account to transact with Razorpay.
+                </p>
+              </div>
+
+              <div className="rounded-xl border border-border/60 bg-surface/35 p-5 transition-colors hover:bg-surface/50">
+                <h3 className="font-semibold text-neutral-100 flex items-center gap-2">
+                  <Zap className="h-4 w-4 text-amber-400" />
+                  How do I test multiplayer features by myself?
+                </h3>
+                <p className="mt-2 text-sm text-neutral-400 leading-relaxed">
+                  Click "Try Demo" to create a lobby. Then, copy the URL and paste it into a <strong>separate Incognito window</strong>. Because Incognito does not share `localStorage` tokens with your main window, the app will safely provision a second Player session for you to test real-time socket events.
+                </p>
+              </div>
+
+              <div className="rounded-xl border border-border/60 bg-surface/35 p-5 transition-colors hover:bg-surface/50">
+                <h3 className="font-semibold text-neutral-100 flex items-center gap-2">
+                  <ShieldCheck className="h-4 w-4 text-emerald-400" />
+                  Will I lose my stats if I play as a Guest first?
+                </h3>
+                <p className="mt-2 text-sm text-neutral-400 leading-relaxed">
+                  Not at all! If you reach the top of the Global Leaderboard as a Guest, simply click "Get Started" to register. The auth router will seamlessly merge your ephemeral token with your new permanent account, ensuring zero progression loss.
+                </p>
+              </div>
+            </div>
           </div>
         </section>
       </main>
