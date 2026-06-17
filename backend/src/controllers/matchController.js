@@ -10,8 +10,6 @@ export async function completeMatch(req, res) {
   try {
     const matchId = req.params.id;
     
-    // For Phase 2 (before we add the actual drawing game), 
-    // the frontend will just tell us who won in the request body.
     const { winnerId } = req.body;
 
     if (!winnerId) {

@@ -284,17 +284,7 @@ export default function LandingPage() {
                   What is the difference between Guest and Real accounts?
                 </h3>
                 <p className="mt-2 text-sm text-neutral-400 leading-relaxed">
-                  Guests are ephemeral demo accounts designed for immediate, frictionless testing. They are automatically deleted by a server CRON job after 24 hours. Real accounts are permanent, allowing you to save your ELO rating, host public matches, and securely manage your wallet.
-                </p>
-              </div>
-
-              <div className="rounded-xl border border-border/60 bg-surface/35 p-5 transition-colors hover:bg-surface/50">
-                <h3 className="font-semibold text-neutral-100 flex items-center gap-2">
-                  <IndianRupee className="h-4 w-4 text-emerald-400" />
-                  Can Guests participate in paid tournaments?
-                </h3>
-                <p className="mt-2 text-sm text-neutral-400 leading-relaxed">
-                  No. To protect against financial data loss and chargeback risks when the 24-hour CRON job cleans the database, Guests are programmatically blocked by the backend API from creating or joining paid tournaments. You must register a free permanent account to transact with Razorpay.
+                  Guests are ephemeral demo accounts — no email or password needed. They are deleted by a CRON job after 24 hours of inactivity. Real accounts are permanent and let you keep your ELO rating, host public tournaments, and manage a wallet. Guests cannot create or join paid tournaments.
                 </p>
               </div>
 
@@ -304,17 +294,47 @@ export default function LandingPage() {
                   How do I test multiplayer features by myself?
                 </h3>
                 <p className="mt-2 text-sm text-neutral-400 leading-relaxed">
-                  Click "Try Demo" to create a lobby. Then, copy the URL and paste it into a <strong>separate Incognito window</strong>. Because Incognito does not share `localStorage` tokens with your main window, the app will safely provision a second Player session for you to test real-time socket events.
+                  Click "Try Demo" to create a lobby. Then copy the invite URL and paste it into a <strong>separate Incognito window</strong>. Incognito does not share `localStorage` tokens with your main window, so the app provisions a second Player session for real-time socket testing.
+                </p>
+              </div>
+
+              <div className="rounded-xl border border-border/60 bg-surface/35 p-5 transition-colors hover:bg-surface/50">
+                <h3 className="font-semibold text-neutral-100 flex items-center gap-2">
+                  <Trophy className="h-4 w-4 text-amber-400" />
+                  What happens if I disconnect during an active match?
+                </h3>
+                <p className="mt-2 text-sm text-neutral-400 leading-relaxed">
+                  You have a 30-second grace period to reconnect. If you come back, the game resumes where it left off (current question, scores, timer). If you don't reconnect in time, your opponent wins by default and the tournament advances. If both players disconnect, the first player wins as a tiebreaker.
+                </p>
+              </div>
+
+              <div className="rounded-xl border border-border/60 bg-surface/35 p-5 transition-colors hover:bg-surface/50">
+                <h3 className="font-semibold text-neutral-100 flex items-center gap-2">
+                  <Swords className="h-4 w-4 text-emerald-400" />
+                  How does Quick Draw scoring work?
+                </h3>
+                <p className="mt-2 text-sm text-neutral-400 leading-relaxed">
+                  One player draws a secret word while the other guesses. The guesser has 5 attempts and 60 seconds. A correct guess wins immediately. If time runs out or all 5 guesses are wrong, the drawer wins. ELO ratings adjust after every match.
+                </p>
+              </div>
+
+              <div className="rounded-xl border border-border/60 bg-surface/35 p-5 transition-colors hover:bg-surface/50">
+                <h3 className="font-semibold text-neutral-100 flex items-center gap-2">
+                  <Brain className="h-4 w-4 text-amber-400" />
+                  How does Trivia scoring work?
+                </h3>
+                <p className="mt-2 text-sm text-neutral-400 leading-relaxed">
+                  Each round shows a multiple-choice question with a 10-second timer. Points are awarded for correct answers — faster answers score higher. After 10 questions, the player with the most points wins. Ties are broken by whoever answered faster on average.
                 </p>
               </div>
 
               <div className="rounded-xl border border-border/60 bg-surface/35 p-5 transition-colors hover:bg-surface/50">
                 <h3 className="font-semibold text-neutral-100 flex items-center gap-2">
                   <ShieldCheck className="h-4 w-4 text-emerald-400" />
-                  Will I lose my stats if I play as a Guest first?
+                  Will I lose my Guest stats if I register later?
                 </h3>
                 <p className="mt-2 text-sm text-neutral-400 leading-relaxed">
-                  Yes. Guest accounts are ephemeral and designed strictly for frictionless demo testing. They are automatically deleted after 24 hours. To build a permanent ELO rating and join paid tournaments, please register a free Real account.
+                  Yes. Guest accounts are deleted after 24 hours and cannot be merged with a real account. Any ELO or match history earned as a Guest is lost. If you want permanent ratings, register with an email before playing.
                 </p>
               </div>
             </div>

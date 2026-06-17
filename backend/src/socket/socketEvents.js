@@ -38,10 +38,9 @@ function checkTriviaBothAnswered(io, matchId, player1Id, player2Id, roomName) {
 
     game.nextRound();
 
-    // 🟢 FIX: Increased delay from 1s to 4s so players can read the results!
     game.timeoutId = setTimeout(() => {
       sendNextTriviaQuestion(io, matchId, player1Id, player2Id);
-    }, 4000); 
+    }, 4000);
   }
 }
 
@@ -86,7 +85,6 @@ async function sendNextTriviaQuestion(io, matchId, player1Id, player2Id) {
 
     game.nextRound();
 
-    // 🟢 FIX: Increased delay from 3s to 4s so players can read the results!
     game.timeoutId = setTimeout(() => {
       sendNextTriviaQuestion(io, matchId, player1Id, player2Id);
     }, 4000);
@@ -202,7 +200,6 @@ export default function setupSocketEvents(io) {
               socket.emit("trivia:waiting", { message: "Waiting for opponent..." });
             }
           } else {
-            // 🟢 FIX: The "Strict Mode Desync" Fix
             socket.emit("trivia:score_update", { scores: game.scores });
 
             if (game.questionStartTime && !game.roundEnded) {

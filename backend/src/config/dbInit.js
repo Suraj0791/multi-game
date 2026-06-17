@@ -100,8 +100,7 @@ export async function cleanupExpiredGuests() {
     await query('UPDATE matches SET player_2_id = NULL WHERE player_2_id = ANY($1)', [guestIds]);
     await query('UPDATE matches SET winner_id = NULL WHERE winner_id = ANY($1)', [guestIds]);
     
-    // CRITICAL FIX: Instead of deleting tournaments hosted by guests, we ORPHAN them so real users don't lose their data!
-    // This requires tournaments.host_id to be nullable. (If it's not, we should alter it during startup).
+    // Orphan tournaments hosted by guests so real players' bracket data is preserved
     await query('UPDATE tournaments SET host_id = NULL WHERE host_id = ANY($1)', [guestIds]);
 
     // 3. Delete the users themselves
