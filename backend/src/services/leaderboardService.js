@@ -11,7 +11,7 @@ export async function getLeaderboard(limit = 10) {
 
     return {
       rank: index + 1,
-      id: player.id,
+      userId: player.id,
       username: player.username,
       avatar_url: player.avatar_url,
       eloRating: player.elo_rating,

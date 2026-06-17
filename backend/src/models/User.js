@@ -55,7 +55,7 @@ export async function getTopPlayers(limit = 10) {
   const result = await query(
     `SELECT id, username, avatar_url, elo_rating, total_wins, total_losses 
      FROM users 
-     WHERE is_guest = FALSE
+     WHERE is_guest = false
      ORDER BY elo_rating DESC, total_wins DESC 
      LIMIT $1`,
     [limit]

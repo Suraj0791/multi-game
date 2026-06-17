@@ -165,6 +165,20 @@ export default function MatchPage() {
   const hasValidUserId = userId && Number(userId) > 0;
 
   if (isLoading || !hasValidUserId) {
+    // For non-waiting routes, if anonymous user lands here directly — show error, not infinite spinner
+    if (!hasValidUserId && matchId !== "waiting" && !joining) {
+      return (
+        <div className="flex flex-col items-center justify-center py-20 gap-4">
+          <p className="text-danger font-semibold">You must be logged in to view this match.</p>
+          <Button
+            variant="outline"
+            onClick={() => navigate("/login", { replace: true })}
+          >
+            Go to Login
+          </Button>
+        </div>
+      );
+    }
     return (
       <div className="flex items-center justify-center py-20">
         <Loader2 className="h-8 w-8 text-amber-500 animate-spin mr-3" />

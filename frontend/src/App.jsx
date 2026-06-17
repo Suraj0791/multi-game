@@ -56,7 +56,7 @@ function App() {
             {/* ====== PUBLIC ROUTES ====== */}
             <Route path="/" element={<LandingPage />} />
             <Route path="/login" element={
-              <PublicRoute>
+              <PublicRoute allowGuests>
                 <LoginPage />
               </PublicRoute>
             } />
