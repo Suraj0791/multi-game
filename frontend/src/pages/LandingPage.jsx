@@ -170,7 +170,7 @@ export default function LandingPage() {
 
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
               <p className="text-sm text-muted-foreground">
-                Opens a live lobby you can test with a second tab.
+                Opens a live lobby you can test with an Incognito window.
               </p>
               <Button
                 variant="outline"

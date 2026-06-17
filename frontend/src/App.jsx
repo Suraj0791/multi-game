@@ -62,6 +62,13 @@ function App() {
               </PublicRoute>
             } />
 
+            {/* Leaderboard is public so anyone can see top players */}
+            <Route path="/leaderboard" element={
+              <Layout>
+                <LeaderboardPage />
+              </Layout>
+            } />
+
             {/* ====== PUBLIC MATCH WAITING ROOM (no login needed) ====== */}
             {/* This route MUST be outside ProtectedRoute so Player 2 in Incognito */}
             {/* can land here directly — MatchPage handles its own guest auto-login */}
@@ -83,7 +90,6 @@ function App() {
               <Route path="/tournaments/new" element={<CreateTournamentPage />} />
               <Route path="/tournaments/:id" element={<TournamentDetailPage />} />
               <Route path="/tournaments/:id/match/:matchId" element={<MatchPage />} />
-              <Route path="/leaderboard" element={<LeaderboardPage />} />
               <Route path="/profile/:id" element={<ProfilePage />} />
             </Route>
 
